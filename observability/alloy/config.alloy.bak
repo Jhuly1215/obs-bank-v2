@@ -1,0 +1,31 @@
+logging {
+  level = "info"
+}
+
+local.file_match "bank_logs" {
+  path_targets = [
+    { "__path__" = "/var/log/bank-apis/api1/*.log", api = "api1" },
+    { "__path__" = "/var/log/bank-apis/api2/*.log", api = "api2" },
+    { "__path__" = "/var/log/bank-apis/api3/*.log", api = "api3" },
+    { "__path__" = "/var/log/bank-apis/api4/*.log", api = "api4" },
+  ]
+}
+
+loki.source.file "bank_files" {
+  targets    = local.file_match.bank_logs.targets
+  forward_to = [loki.write.default.receiver]
+  tail_from_end = true
+}
+
+# Etapa 2 (opcional): pipeline para detectar JSON/TXT y extraer level/timestamp
+# Empieza sin parseo si quieres reproducibilidad rápida.
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+  external_labels = {
+    source = "alloy-file"
+    env    = "demo"
+  }
+}

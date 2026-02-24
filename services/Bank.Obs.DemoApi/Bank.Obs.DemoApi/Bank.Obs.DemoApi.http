@@ -1,0 +1,6 @@
+@Bank.Obs.DemoApi_HostAddress = http://localhost:5063
+
+GET {{Bank.Obs.DemoApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

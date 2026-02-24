@@ -1,0 +1,130 @@
+name: obs-bank-v2
+
+services:
+  # =========================
+  # CORE OBSERVABILIDAD
+  # =========================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    command: ["--config=/etc/otelcol/config.yml"]
+    volumes:
+      - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus scrape endpoint del collector
+    networks: [obs]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks: [obs]
+
+  loki:
+    image: grafana/loki:3.1.1
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks: [obs]
+
+  tempo:
+    image: grafana/tempo:2.10.0
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"
+      # opcional si quieres recibir OTLP directo en Tempo (normalmente entra por collector)
+      - "4319:4317"
+    networks: [obs]
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks: [obs]
+
+  # =========================
+  # INGESTA LOGS (TXT/JSON)
+  # =========================
+  alloy:
+    image: grafana/alloy:v1.13.0
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./sample-logs:/var/log/bank-apis:ro
+      - alloy_data:/var/lib/alloy/data
+    depends_on:
+      - loki
+    networks: [obs]
+
+  # =========================
+  # API DEMO .NET 9 (OTEL)
+  # =========================
+  demo-api:
+    build:
+      context: ./services/Bank.Obs.DemoApi/Bank.Obs.DemoApi
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
+      OpenTelemetry__ServiceName: bank-obs-demo-api
+      OpenTelemetry__ServiceVersion: 2.0.0
+    ports:
+      - "5000:8080"
+    depends_on:
+      - otel-collector
+    networks: [obs]
+
+  # =========================
+  # SQL POLLER .NET 9 (MÉTRICAS DESDE SQL SERVER)
+  # =========================
+  sql-poller:
+    build:
+      context: ./services/Bank.Obs.SqlPoller/Bank.Obs.SqlPoller
+      dockerfile: Dockerfile
+    environment:
+      SqlPoller__ConnectionString: ${SQLSERVER_CONN}
+      SqlPoller__IntervalSeconds: 60
+      OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
+      OpenTelemetry__ServiceName: bank-sql-poller
+      OpenTelemetry__ServiceVersion: 2.0.0
+    depends_on:
+      - otel-collector
+    networks: [obs]
+    restart: unless-stopped
+
+networks:
+  obs:
+    driver: bridge
+
+volumes:
+  prom_data:
+  loki_data:
+  tempo_data:
+  grafana_data:
+  alloy_data:

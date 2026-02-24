@@ -91,6 +91,7 @@ services:
       dockerfile: Dockerfile
     environment:
       ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
       OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
       OpenTelemetry__ServiceName: bank-obs-demo-api
       OpenTelemetry__ServiceVersion: 2.0.0

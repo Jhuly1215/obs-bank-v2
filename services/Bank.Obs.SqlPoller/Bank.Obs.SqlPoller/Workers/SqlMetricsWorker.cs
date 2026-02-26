@@ -1,10 +1,11 @@
-using Bank.Obs.SqlPoller.Metrics; 
+using Bank.Obs.SqlPoller.Metrics;
 using Bank.Obs.SqlPoller.Polling;
 using Bank.Obs.SqlPoller.State;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,7 +24,7 @@ public sealed class SqlMetricsWorker : BackgroundService
         ILogger<SqlMetricsWorker> logger,
         MetricState state,
         SqlPollingClient poller,
-        SqlMetrics metrics) 
+        SqlMetrics metrics)
     {
         _config = config;
         _logger = logger;
@@ -42,6 +43,8 @@ public sealed class SqlMetricsWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            var sw = Stopwatch.StartNew();
+
             try
             {
                 var snap = await _poller.PollAsync(connString, stoppingToken);
@@ -57,29 +60,27 @@ public sealed class SqlMetricsWorker : BackgroundService
                     snap.IntraPendingMaxAgeMin,
                     snap.InterPendingMaxAgeMin);
 
+                sw.Stop();
+                _metrics.RecordPollSuccess(sw.Elapsed.TotalSeconds);
+
                 _logger.LogInformation(
-                    "SQL poll ok. intra30d={intra30d}, inter30d={inter30d}, backlog_intra_7d={bintra}, backlog_inter_7d={binter}",
+                    "SQL poll ok. intra30d={intra30d}, inter30d={inter30d}, backlog_intra_7d={bintra}, backlog_inter_7d={binter}, duration_ms={durationMs}",
                     snap.IntraTxLast30d,
                     snap.InterTxLast30d,
                     snap.IntraPendingLast7d,
-                    snap.InterPendingLast7d);
-
-                // Si tu clase SqlMetrics tiene métodos imperativos (counter/histogram), llámalos aquí.
-                // Ejemplo (solo si existen):
-                // _metrics.RecordPollSuccess();
+                    snap.InterPendingLast7d,
+                    sw.ElapsedMilliseconds);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // apagado normal del servicio
                 break;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error en SQL poller");
+                sw.Stop();
+                _metrics.RecordPollError(sw.Elapsed.TotalSeconds);
 
-                // Si tu clase SqlMetrics tiene contador de errores, úsalo aquí.
-                // Ejemplo (solo si existe):
-                // _metrics.RecordPollError();
+                _logger.LogError(ex, "Error en SQL poller");
             }
 
             try

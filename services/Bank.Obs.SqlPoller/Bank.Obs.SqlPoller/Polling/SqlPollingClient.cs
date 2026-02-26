@@ -16,12 +16,12 @@ public sealed class SqlPollingClient
         var interTxLast30d = await ScalarIntAsync(conn, SqlQueries.InterTxLast30d, ct);
 
         var intraPendingLast7d = await ScalarIntAsync(conn, SqlQueries.IntraPendingLast7d, ct);
-        var interPendingLast7d = await ScalarIntAsync(conn, SqlQueries.InterPendingLast7d, ct);
+        var interPendingLast7d = await ScalarIntAsync(conn, SqlQueries.InterPendingProxyLast7d, ct);
 
         var intraFailTechRate30d = await ScalarDoubleAsync(conn, SqlQueries.IntraFailTechRate30d, ct);
         var interFailTechRate30d = await ScalarDoubleAsync(conn, SqlQueries.InterFailTechRate30d, ct);
 
-        var intraState9InterShare30d = await ScalarDoubleAsync(conn, SqlQueries.IntraState9InterShare30d, ct);
+        var interState9ObservedShare30d = await ScalarDoubleAsync(conn, SqlQueries.InterState9ObservedShare30d, ct);
 
         var intraPendingMaxAgeMin = await ScalarDoubleAsync(conn, SqlQueries.IntraPendingMaxAgeMin, ct);
         var interPendingMaxAgeMin = await ScalarDoubleAsync(conn, SqlQueries.InterPendingMaxAgeMin, ct);
@@ -33,7 +33,7 @@ public sealed class SqlPollingClient
             interPendingLast7d,
             intraFailTechRate30d,
             interFailTechRate30d,
-            intraState9InterShare30d,
+            interState9ObservedShare30d,
             intraPendingMaxAgeMin,
             interPendingMaxAgeMin);
     }
@@ -56,7 +56,7 @@ public sealed class SqlPollingClient
         int IntraTxLast30d,
         int InterTxLast30d,
         int IntraPendingLast7d,
-        int InterPendingLast7d,
+        int InterPendingLast7d, 
         double IntraFailTechRate30d,
         double InterFailTechRate30d,
         double IntraState9InterShare30d,

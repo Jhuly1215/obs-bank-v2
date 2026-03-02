@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Serilog;
 using Serilog.Formatting.Compact;
 using System.Threading.RateLimiting;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -78,7 +79,22 @@ builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 // --- Idempotency store (demo in-memory) ---
-builder.Services.AddSingleton<IdempotencyStore>();
+var idempProvider = builder.Configuration["Idempotency:Provider"] ?? "InMemory";
+var ttlSeconds = builder.Configuration.GetValue<int>("Idempotency:TtlSeconds");
+var ttl = TimeSpan.FromSeconds(ttlSeconds <= 0 ? 3600 : ttlSeconds);
+
+builder.Services.AddSingleton(new IdempotencyTtl(TimeSpan.FromMinutes(10)));
+
+if (idempProvider.Equals("Redis", StringComparison.OrdinalIgnoreCase))
+{
+    var redisConn = builder.Configuration["Idempotency:RedisConnectionString"] ?? "redis:6379";
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConn));
+    builder.Services.AddSingleton<IIdempotencyStore, RedisIdempotencyStore>();
+}
+else
+{
+    builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
+}
 
 // --- HttpClient & Metadata ---
 var meta = ServiceMetadata.FromConfiguration(builder.Configuration);

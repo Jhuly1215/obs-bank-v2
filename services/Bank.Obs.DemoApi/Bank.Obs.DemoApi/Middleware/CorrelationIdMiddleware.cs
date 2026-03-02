@@ -1,25 +1,32 @@
+using Microsoft.AspNetCore.Http;
 using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Bank.Obs.DemoApi.Middleware;
 
-public sealed class CorrelationIdMiddleware : IMiddleware
+public sealed class CorrelationIdMiddleware
 {
-    public const string HeaderName = "X-Correlation-Id";
+    private readonly RequestDelegate _next;
+    private const string HeaderKey = "X-Correlation-Id";
+    private static readonly Regex Allowed = new(@"^[a-zA-Z0-9\-_]{8,128}$", RegexOptions.Compiled);
 
-    public async Task InvokeAsync(HttpContext context, RequestDelegate next)
+    public CorrelationIdMiddleware(RequestDelegate next) => _next = next;
+
+    public async Task Invoke(HttpContext context)
     {
-        var corrId = context.Request.Headers.TryGetValue(HeaderName, out var h) && !string.IsNullOrWhiteSpace(h)
-            ? h.ToString()
-            : Guid.NewGuid().ToString("N");
-
-        context.Response.Headers[HeaderName] = corrId;
-
-        using (context.RequestServices.GetRequiredService<ILogger<CorrelationIdMiddleware>>()
-                   .BeginScope(new Dictionary<string, object> { ["correlation_id"] = corrId }))
+        var correlationId = context.Request.Headers[HeaderKey].FirstOrDefault();
+        if (string.IsNullOrEmpty(correlationId) || !Allowed.IsMatch(correlationId))
         {
-            await next(context);
+            correlationId = Guid.NewGuid().ToString("N");
+        }
+
+        context.TraceIdentifier = correlationId;
+        context.Response.Headers[HeaderKey] = correlationId;
+
+        using (Serilog.Context.LogContext.PushProperty("correlation_id", correlationId))
+        {
+            await _next(context);
         }
     }
 }

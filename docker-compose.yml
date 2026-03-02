@@ -48,19 +48,33 @@ services:
 
   grafana:
     image: grafana/grafana:11.1.4
+    container_name: grafana
+    restart: unless-stopped
+
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_SMTP_ENABLED: true
-      GF_SMTP_HOST: smtp.gmail.com:587
-      GF_SMTP_USER: jhulsdev@gmail.com
-      GF_SMTP_PASSWORD: contrasena
-      GF_SMTP_FROM_ADDRESS: jhulsdev@gmail.com
-      GF_SMTP_FROM_NAME: EcoFuturo Observability
+      # Admin local solo para break-glass (no quitar confirmar LDAP)
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+
+      # SMTP
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: ${GF_SMTP_HOST}
+      GF_SMTP_USER: ${GF_SMTP_USER}
+      GF_SMTP_PASSWORD: ${GF_SMTP_PASSWORD}
+      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS}
+      GF_SMTP_FROM_NAME: ${GF_SMTP_FROM_NAME}
       GF_SMTP_STARTTLS_POLICY: MandatoryStartTLS
+      # LDAP bind password se usa dentro de ldap.toml como ${LDAP_BIND_PASSWORD}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD}
+
     volumes:
       - grafana_data:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      #LDAP
+      - ./observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./observability/grafana/ldap.toml:/etc/grafana/ldap.toml:ro
+      - ./observability/certs/ca-banco.pem:/etc/ssl/certs/ca-banco.pem:ro
+
     ports:
       - "3000:3000"
     depends_on:

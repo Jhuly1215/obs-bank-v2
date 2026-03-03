@@ -140,7 +140,7 @@ services:
 networks:
   obs:
     driver: bridge
-
+    
 volumes:
   prom_data:
   loki_data:

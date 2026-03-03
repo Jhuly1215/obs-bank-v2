@@ -48,9 +48,12 @@ services:
 
   grafana:
     image: grafana/grafana:11.1.4
+    container_name: grafana
+    restart: unless-stopped
+
     environment:
-      GF_SECURITY_ADMIN_USER: "{GF_SECURITY_ADMIN_USER}"
-      GF_SECURITY_ADMIN_PASSWORD: "{GF_SECURITY_ADMIN_PASSWORD}"
+      GF_SECURITY_ADMIN_USER: "${GF_SECURITY_ADMIN_USER}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GF_SECURITY_ADMIN_PASSWORD}"
 
       # === SMTP (EMAIL ALERTS) ===
       GF_SMTP_ENABLED: "true"
@@ -64,6 +67,11 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      #LDAP
+      - ./observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./observability/grafana/ldap.toml:/etc/grafana/ldap.toml:ro
+      - ./observability/certs/ca-banco.pem:/etc/ssl/certs/ca-banco.pem:ro
+
     ports:
       - "3000:3000"
     depends_on:

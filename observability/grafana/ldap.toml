@@ -1,18 +1,18 @@
 [[servers]]
-host = "ad01.banco.local"
-port = 636
-use_ssl = true
+host = "192.168.200.40"
+port = 389
+use_ssl = false
 start_tls = false
 ssl_skip_verify = false
 
-bind_dn = "CN=svc_grafana_ldap,OU=Service Accounts,DC=banco,DC=local"
+bind_dn = "CN=svc_grafana_ldap,DC=adecofuturo,DC=bo"
 bind_password = "${LDAP_BIND_PASSWORD}"
 
 search_filter = "(sAMAccountName=%s)"
-search_base_dns = ["DC=banco,DC=local"]
+search_base_dns = ["DC=adecofuturo,DC=bo"]
 
 group_search_filter = "(&(objectClass=group)(member=%s))"
-group_search_base_dns = ["OU=Groups,DC=banco,DC=local"]
+group_search_base_dns = ["DC=adecofuturo,DC=bo"]
 
 [servers.attributes]
 name = "givenName"
@@ -22,17 +22,17 @@ member_of = "memberOf"
 email = "mail"
 
 [[servers.group_mappings]]
-group_dn = "CN=GG-Grafana-Admins,OU=Groups,DC=banco,DC=local"
+group_dn = "CN=GG-Grafana-Admins,DC=adecofuturo,DC=bo"
 org_role = "Admin"
 
 [[servers.group_mappings]]
-group_dn = "CN=GG-Grafana-Editors,OU=Groups,DC=banco,DC=local"
+group_dn = "CN=GG-Grafana-Editors,DC=adecofuturo,DC=bo"
 org_role = "Editor"
 
 [[servers.group_mappings]]
-group_dn = "CN=GG-Grafana-Viewers,OU=Groups,DC=banco,DC=local"
+group_dn = "CN=GG-Grafana-Viewers,DC=adecofuturo,DC=bo"
 org_role = "Viewer"
 
 [[servers.group_mappings]]
-group_dn = "CN=GG-Grafana-Auditors,OU=Groups,DC=banco,DC=local"
+group_dn = "CN=GG-Grafana-Auditors,DC=adecofuturo,DC=bo"
 org_role = "Viewer"

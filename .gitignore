@@ -72,6 +72,8 @@ coverage/
 
 publish/
 out/
+deploy/prod/.env
+**/.env
 
 ############################
 # ?? Database / Temp

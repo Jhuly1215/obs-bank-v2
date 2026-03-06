@@ -6,14 +6,14 @@ services:
   # =========================
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.111.0
-    command: ["--config=/etc/otelcol/config.yml"]
+    command: [ "--config=/etc/otelcol/config.yml" ]
     volumes:
       - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro
     ports:
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
-      - "8889:8889"   # Prometheus scrape endpoint del collector
-    networks: [obs]
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "8889:8889" # Prometheus scrape endpoint del collector
+    networks: [ obs ]
 
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -22,7 +22,7 @@ services:
       - prom_data:/prometheus
     ports:
       - "9090:9090"
-    networks: [obs]
+    networks: [ obs ]
 
   loki:
     image: grafana/loki:3.1.1
@@ -32,11 +32,11 @@ services:
       - loki_data:/loki
     ports:
       - "3100:3100"
-    networks: [obs]
+    networks: [ obs ]
 
   tempo:
     image: grafana/tempo:2.10.0
-    command: ["-config.file=/etc/tempo.yaml"]
+    command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
       - ./observability/tempo.yml:/etc/tempo.yaml:ro
       - tempo_data:/var/tempo
@@ -44,7 +44,7 @@ services:
       - "3200:3200"
       # opcional: recibir OTLP directo en Tempo (normalmente entra por collector)
       - "4319:4317"
-    networks: [obs]
+    networks: [ obs ]
 
   grafana:
     image: grafana/grafana:11.1.4
@@ -78,7 +78,7 @@ services:
       - prometheus
       - loki
       - tempo
-    networks: [obs]
+    networks: [ obs ]
 
   # =========================
   # INGESTA LOGS (TXT/JSON)
@@ -98,7 +98,7 @@ services:
       - alloy_data:/var/lib/alloy/data
     depends_on:
       - loki
-    networks: [obs]
+    networks: [ obs ]
 
   # =========================
   # API DEMO .NET 9 (OTEL)
@@ -117,7 +117,7 @@ services:
       - "5000:8080"
     depends_on:
       - otel-collector
-    networks: [obs]
+    networks: [ obs ]
 
   # =========================
   # SQL POLLER .NET 9 (MÉTRICAS DESDE SQL SERVER)
@@ -134,25 +134,45 @@ services:
       OpenTelemetry__ServiceVersion: 2.0.0
     depends_on:
       - otel-collector
-    networks: [obs]
+    networks: [ obs ]
     restart: unless-stopped
 
   redis:
     image: redis:7.4-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    command: [ "redis-server", "--appendonly", "yes" ]
     volumes:
       - redis_data:/data
-    networks: [obs]
+    networks: [ obs ]
+    restart: unless-stopped
+
+  # =========================
+  # Grafana FCM Bridge (Alertas a Android Push)
+  # =========================
+  fcm-bridge:
+    build:
+      context: ./services/Bank.Obs.FcmBridge/Bank.Obs.FcmBridge
+      dockerfile: Dockerfile
+    environment:
+      # Debe montarse en este path dentro del container
+      GOOGLE_APPLICATION_CREDENTIALS: /etc/secrets/firebase-service-account.json
+      # Pasamos el bearer token de autenticación
+      BRIDGE_API_KEY: ${BRIDGE_API_KEY:-dev_key_super_secret_123}
+    ports:
+      - "5001:8080"
+    volumes:
+      # Montamos el service-account desde observability/certs (se asume que el user lo pegará allí)
+      - ./observability/certs/firebase-service-account.json:/etc/secrets/firebase-service-account.json:ro
+    networks: [ obs ]
     restart: unless-stopped
 
 networks:
   obs:
     driver: bridge
-    
+
 volumes:
   prom_data:
   loki_data:
   tempo_data:
   grafana_data:
   alloy_data:
-  redis_data:  
+  redis_data:

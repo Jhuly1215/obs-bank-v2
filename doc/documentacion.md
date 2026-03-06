@@ -1,535 +1,190 @@
-﻿# obs-bank-v2
+﻿# obs-bank-v2 - Documentación Técnica
 
 Stack de **observabilidad end-to-end** orientado a un escenario bancario (simulado), construido con **.NET 9 + OpenTelemetry + Grafana (Prometheus/Loki/Tempo)** y orquestado con **Docker Compose**.
 
-> **Importante:** este repositorio **no es un core bancario** ni una banca completa. Es un **sandbox/laboratorio de observabilidad** con:
-> - una API demo (`demo-api`) que simula transferencias,
-> - un worker (`sql-poller`) que consulta SQL Server y expone métricas,
-> - y un stack de observabilidad para centralizar **logs, métricas y trazas**.
+> **Importante:** Este repositorio **no es un core bancario** ni una banca completa. Es un **sandbox/laboratorio de observabilidad** diseñado para demostrar la integración de telemetría y su maduración hacia entornos productivos.
 
 ---
 
 ## Tabla de contenido
-
 - [Qué hace este proyecto](#qué-hace-este-proyecto)
 - [Arquitectura](#arquitectura)
 - [Componentes](#componentes)
-- [Estructura del repositorio](#estructura-del-repositorio)
-- [Tecnologías](#tecnologías)
-- [Requisitos](#requisitos)
-- [Cómo levantar el entorno](#cómo-levantar-el-entorno)
-- [Accesos y puertos](#accesos-y-puertos)
-- [Uso rápido](#uso-rápido)
-- [Flujo de observabilidad](#flujo-de-observabilidad)
-- [Configuración clave](#configuración-clave)
+- [Estructura del Repositorio](#estructura-del-repositorio)
+- [Despliegue y Ambientes](#despliegue-y-ambientes)
+- [Flujo de Observabilidad y Uso Rápido](#flujo-de-observabilidad-y-uso-rápido)
+- [Configuración Clave](#configuración-clave)
 - [Troubleshooting](#troubleshooting)
-- [Limitaciones actuales](#limitaciones-actuales)
-- [Mejoras sugeridas](#mejoras-sugeridas)
+- [Seguridad y Recomendaciones de Producción](#seguridad-y-recomendaciones-de-producción)
 
 ---
 
 ## Qué hace este proyecto
+Este proyecto centraliza telemetría (logs, métricas y trazas) desde distintas fuentes:
+1. **Aplicaciones .NET instrumentadas con OpenTelemetry** (`demo-api` y `sql-poller`).
+2. **Logs de archivos locales** ingeridos por **Grafana Alloy**.
+3. **Backend de observabilidad** basado en el ecosistema de Grafana (Prometheus, Loki, Tempo).
 
-Este proyecto centraliza telemetría desde distintas fuentes:
-
-1. **Aplicaciones .NET instrumentadas con OpenTelemetry**
-   - `demo-api` (API mínima)
-   - `sql-poller` (worker de métricas desde SQL Server)
-
-2. **Logs de archivos locales**
-   - Ingeridos por **Grafana Alloy** desde `sample-logs/`
-
-3. **Backend de observabilidad**
-   - **Prometheus** (métricas)
-   - **Loki** (logs)
-   - **Tempo** (trazas)
-   - **Grafana** (visualización y correlación)
-
-### Casos de uso del repo
-- Probar OpenTelemetry en .NET
-- Validar pipelines OTLP → Collector → Grafana stack
-- Correlacionar logs/trazas/métricas en un flujo tipo “transferencia bancaria”
-- Exponer métricas operativas obtenidas desde SQL Server
+### Casos de uso
+- Probar OpenTelemetry en .NET.
+- Validar pipelines OTLP → Collector → Grafana stack.
+- Configurar backends escalables usando MinIO (S3) para almacenamiento de logs y trazas en un contexto casi real.
+- Exponer métricas operativas obtenidas desde fuentes externas de base de datos SQL.
 
 ---
 
 ## Arquitectura
 
+La arquitectura soporta dos métodos de almacenamiento principales dependiendo del entorno configurado: **Local (Filesystem)** para desarrollo rápido y **Producción (Object Storage S3 con MinIO)**.
+
 ```text
                      ┌────────────────────────────┐
                      │        demo-api (.NET 9)   │
-                     │  - Logs OTEL               │
-HTTP :5000 ────────▶ │  - Traces OTEL             │
-                     │  - Metrics OTEL            │
+                     │  - Logs, Traces, Metrics   │
                      └─────────────┬──────────────┘
-                                   │ OTLP gRPC (4317)
+                                   │ OTLP (4317)
                                    ▼
                      ┌────────────────────────────┐
                      │  OpenTelemetry Collector   │
-                     │  Receivers: OTLP gRPC/HTTP │
-                     │  Pipelines: traces/metrics/logs
                      └───────┬─────────┬──────────┘
                              │         │
-                  metrics    │         │ logs
-               (Prom exp)    │         │
+                  metrics    │         │ logs, traces
                              ▼         ▼
-                     ┌────────────┐  ┌───────────┐
-                     │ Prometheus │  │   Loki    │
-                     └─────┬──────┘  └─────┬─────┘
-                           │               │
-                           └──────┬────────┘
-                                  ▼
-                            ┌──────────┐
-                            │ Grafana  │
-                            └────┬─────┘
-                                 │
-                                 ▼
-                              ┌──────┐
-                              │Tempo │
-                              └──────┘
-
-
-      ┌────────────────────────────┐           ┌───────────┐
-      │   sql-poller (.NET 9)      │ OTLP gRPC │ OTel Col. │
-      │ - consulta SQL Server      ├──────────▶│           │
-      │ - emite métricas OTEL      │           └───────────┘
-      └──────────────┬─────────────┘
-                     │ SQL Server (externo)
-                     ▼
-                [SQLSERVER_CONN]
-
-
-      ┌────────────────────────────┐
-      │ Grafana Alloy              │
-      │ - lee sample-logs          │
-      │ - envía a Loki             │
-      └──────────────┬─────────────┘
-                     ▼
-                    Loki
-
+                     ┌────────────┐  ┌───────────┐  ┌───────────┐
+                     │ Prometheus │  │   Loki    │  │   Tempo   │
+                     └─────┬──────┘  └─────┬─────┘  └─────┬─────┘
+                           │               │              │
+                           │               ▼              ▼
+                           │         [Almacenamiento S3 / MinIO] * (En Producción)
+                           └───────────────┬──────────────┘
+                                           │
+                                           ▼
+                                     ┌──────────┐
+                                     │ Grafana  │
+                                     └──────────┘
 ```
 
+Componentes adicionales inyectan datos al stack:
+- **`sql-poller`**: Consulta un servidor SQL externo y expone métricas operativas de forma constante enviándolas al Collector.
+- **`Grafana Alloy`**: Observa el directorio físico `sample-logs/` ingestando estos logs sueltos a Loki de forma estructurada.
+
 ---
+
 ## Componentes
 
 ### 1) `demo-api` (API demo en .NET 9)
+Expone `/health` y `POST /api/transactions/transfer`. Emite logs enriquecidos, trazas distribuidas y métricas por OTLP usando la telemetría .NET predeterminada y personalizada al Collector. Integra y reenvía headers tipo `X-Correlation-Id` en las requests.
 
-API mínima instrumentada con OpenTelemetry que simula transferencias.
-
-#### Funcionalidad
-- Expone endpoint de health
-- Expone endpoint de transferencia simulada
-- Genera logs estructurados
-- Emite trazas y métricas por OTLP al OTel Collector
-- Usa `X-Correlation-Id` para correlación (si no llega, lo genera)
-
-#### Endpoints
-- `GET /health`
-- `POST /api/transactions/transfer`
-
-#### Qué **no** hace
-- No persiste transferencias
-- No implementa core bancario real
-- No integra con terceros reales
-
----
-
-### 2) `sql-poller` (worker de métricas desde SQL Server)
-
-Worker en .NET que consulta periódicamente un SQL Server externo y transforma resultados en métricas (via OpenTelemetry).
-
-#### Funcionalidad
-- Se ejecuta en background
-- Lee conexión desde `SQLSERVER_CONN`
-- Consulta tablas del dominio de transferencias
-- Calcula métricas operativas (conteos, pendientes, ratios, antigüedad)
-- Exporta métricas OTLP al Collector
-
-#### Dependencia clave
-Necesita acceso a SQL Server con tablas como:
-- `Transferencia`
-- `TransferenciaInterbancaria`
-
-> Si no defines `SQLSERVER_CONN`, este servicio fallará al iniciar.
-
----
+### 2) `sql-poller`
+Worker standalone de .NET que lee constantemente métricas de negocio desde una base de datos utilizando `SQLSERVER_CONN`. Genera métricas operativas en formato OpenTelemetry (indicadores de transferencias, tiempos).
 
 ### 3) OpenTelemetry Collector
+Recibe métricas, logs y trazas a través del de los receivers OTLP gRPC/HTTP (`4317`/`4318`) y las enruta a través de diversos *pipelines* hacia Prometheus (`:8889`), Loki y Tempo de forma unificada.
 
-Punto central de recepción de telemetría.
-
-#### Pipelines
-- **traces** → Tempo
-- **metrics** → Prometheus exporter (`:8889`)
-- **logs** → Loki
-
-También tiene exporter `debug` (útil para demo; ruidoso en producción).
-
----
-
-### 4) Prometheus
-
-Hace scrape al endpoint de métricas expuesto por el Collector (`otel-collector:8889`) y a sí mismo.
-
-> No scrapea directamente `demo-api` ni `sql-poller`.
+### 4) Stack de Almacenamiento y Visualización
+- **Prometheus**: Realiza *scraping* de métricas expuestas en el Collector (`:8889`).
+- **Loki**: Sistema de manejo de logs altamente escalable (optimizado usando meta-labels).
+- **Tempo**: Backend ligero de trazas distribuidas. 
+- **MinIO (Sólo Prod)**: Nodo S3 compatible que otorga *object storage* a las estructuras de Loki y Tempo para archivar grandes volúmenes de datos en paralelo.
+- **Grafana**: Panel visual universal centralizado (interfaz expuesta en `localhost:3000`).
 
 ---
 
-### 5) Loki
+## Estructura del Repositorio
 
-Backend de logs para:
-- logs enviados por OTel Collector (desde apps .NET)
-- logs de archivos enviados por Alloy
-
----
-
-### 6) Tempo
-
-Backend de trazas OpenTelemetry.
-
----
-
-### 7) Grafana
-
-UI de observabilidad con datasources provisionados:
-- Prometheus
-- Loki
-- Tempo
-
-Incluye provisioning de datasources, pero **no dashboards listos** (ver [Limitaciones actuales](#limitaciones-actuales)).
-
----
-
-### 8) Grafana Alloy
-
-Lee logs desde `sample-logs/` y los envía a Loki.
-
-#### Rutas esperadas (según config)
-- `InterbancariaAsyncAPI/*.log`
-- `TransaccionInternaApi/*.log`
-- `logsEconetTransacciones/*.json`
-- `logsEconetTransaccionesInterbancarias/*.json`
-
----
-
-## Estructura del repositorio
+La arquitectura cuenta con su rama original base, sumándole un subdirectorio con "overrides" destinados al despliegue productivo.
 
 ```text
 obs-bank-v2/
-├─ docker-compose.yml
-├─ README.md
-├─ sample-logs/
-│  ├─ InterbancariaAsyncAPI/
-│  ├─ TransaccionInternaApi/
-│  ├─ logsEconetTransacciones/
-│  └─ logsEconetTransaccionesInterbancarias/
-├─ observability/
-│  ├─ otel-collector-config.yml
-│  ├─ prometheus.yml
-│  ├─ loki-config.yml
-│  ├─ tempo.yml
-│  ├─ alloy/
-│  │  └─ config.alloy
-│  └─ grafana/
-│     └─ provisioning/
-│        ├─ datasources/
-│        │  └─ datasources.yml
-│        └─ dashboards/
-│           └─ dashboards.yml
-└─ services/
-   ├─ Bank.Obs.DemoApi/
-   │  └─ Bank.Obs.DemoApi/
-   └─ Bank.Obs.SqlPoller/
-      └─ Bank.Obs.SqlPoller/
+├─ docker-compose.yml           # Definición de servicios base (Modo Local/Desarrollo)
+├─ deploy/
+│  └─ prod/                     # Directivas compose y configuraciones para Producción
+│     ├─ .env                   # Variables de entorno y contraseñas
+│     ├─ docker-compose.prod.yml
+│     ├─ docker-compose.minio.yml
+│     ├─ docker-compose.loki-s3.yml
+│     ├─ docker-compose.tempo-s3.yml
+│     └─ docker-compose.loki-config-prod.yml
+├─ observability/               # Mapeo de Volúmenes y configuraciones nativas
+│  ├─ loki-config.yml           # Configuración Local (filesystem storage)
+│  └─ loki-config.prod.yml      # Configuración Prod (S3 block storage)
+├─ sample-logs/                 # Ejemplos de logs recogidos por Alloy
+└─ services/                    # Código fuente base .NET 9 API y Workers
 ```
-## Tecnologías
-
-- **.NET 9**
-- **OpenTelemetry (OTLP)**
-- **OpenTelemetry Collector**
-- **Prometheus**
-- **Loki**
-- **Tempo**
-- **Grafana**
-- **Grafana Alloy**
-- **Docker Compose**
-- **SQL Server** (externo, para `sql-poller`)
 
 ---
 
-## Requisitos
+## Despliegue y Ambientes
 
-### Requisitos mínimos
-- Docker
-- Docker Compose
-- (Opcional pero recomendado) SQL Server accesible si quieres usar `sql-poller`
+Antes de iniciar cualquier comando, asegúrate de detener arquitecturas previamente subidas del mismo puerto para evitar colisión de hosts.
 
-### Puertos libres (host)
-- `3000` (Grafana)
-- `3100` (Loki)
-- `3200` (Tempo)
-- `4317` (OTLP gRPC - Collector)
-- `4318` (OTLP HTTP - Collector)
-- `4319` (OTLP gRPC - Tempo, opcional)
-- `5000` (demo-api)
-- `9090` (Prometheus)
-- `12345` (Alloy)
-- `8889` (Prometheus exporter del Collector)
-
----
-
-## Cómo levantar el entorno
-
-### Opción A: Stack completo (incluyendo `sql-poller`)
-> Requiere `SQLSERVER_CONN`
-
-#### Linux / macOS
+### Opción A: Entorno Local (Desarrollo Rápido)
+Modo rápido y liviano. Evita MinIO usando el almacenamiento base del disco.
 ```bash
-export SQLSERVER_CONN="Server=...;Database=...;User Id=...;Password=...;TrustServerCertificate=True"
-docker compose up --build
+docker-compose up --build -d
 ```
-### Opción B: Levantar sin sql-poller (si no tienes SQL Server)
+> **Nota Opcional:** Si no definiste un servidor de base de datos válido en la variable global `SQLSERVER_CONN`, el contenedor `sql-poller` arrojará excepciones de inicialización.
+
+### Opción B: Entorno Producción (Arquitectura S3 Storage)
+Se superponen y combinan archivos compose del directorio `deploy/prod/`. Esto inicializa a MinIO con un contenedor auxiliar aprovisionando automáticamente los *buckets* `loki` y `tempo`.
 ```bash
-docker compose up --build otel-collector prometheus loki tempo grafana alloy demo-api
+docker-compose -f docker-compose.yml \
+  -f deploy/prod/docker-compose.prod.yml \
+  -f deploy/prod/docker-compose.minio.yml \
+  -f deploy/prod/docker-compose.loki-s3.yml \
+  -f deploy/prod/docker-compose.tempo-s3.yml \
+  -f deploy/prod/docker-compose.loki-config-prod.yml \
+  up -d
 ```
-## Accesos y puertos
-
-### UIs / APIs
-- **Grafana**: `http://localhost:3000`
-  - usuario: `admin`
-  - contraseña: `admin`
-- **Prometheus**: `http://localhost:9090`
-- **Loki**: `http://localhost:3100`
-- **Tempo**: `http://localhost:3200`
-- **Alloy**: `http://localhost:12345`
-- **Demo API**: `http://localhost:5000`
-
-> Credenciales y configuración actuales son de **demo/local**, no de producción.
 
 ---
 
-## Uso rápido
+## Flujo de Observabilidad y Uso Rápido
 
-### 1) Verificar que la API demo responde
-Abre en tu navegador:
+1. **Uso Mínimo de la API**:
+   - Comprobación: GET `http://localhost:5000/health`
+   - Transacción: POST `http://localhost:5000/api/transactions/transfer` (Puedes adjuntar en la cabecera del Request HTTP o Postman: `X-Correlation-Id: test-trace-123`).
 
-- `http://localhost:5000/health`
-
-Deberías recibir una respuesta JSON con estado del servicio.
-
----
-
-### 2) Ejecutar una transferencia simulada
-
-Haz un `POST` a:
-
-- `http://localhost:5000/api/transactions/transfer`
-
-#### Opción recomendada (sin consola): Postman / Insomnia
-- Método: `POST`
-- URL: `http://localhost:5000/api/transactions/transfer`
-- Body: vacío (si el endpoint no exige payload)
-- Header opcional:
-  - `X-Correlation-Id: prueba-123`
-
-> Si falla de forma aleatoria, no siempre es un bug: la API simula fallos/latencia como parte del escenario demo.
+2. **Visualizar y Correlacionar**:
+   - Navega al **Grafana** (`http://localhost:3000` — Login: `admin`/`admin`).
+   - Ve a `Explore` y busca en el *datasource* de Loki tu log asociado al *correlation ID* enviado durante el HTTP POST.
+   - Observa si el log lleva asociado un Trace ID, y presiona el enlace generado para que te redirija al datasource de Tempo, mostrando el flujo interno estructurado.
 
 ---
 
-### 3) Probar correlación (`X-Correlation-Id`)
-Puedes enviar manualmente este header en Postman/Insomnia:
+## Configuración Clave
 
-- **Key:** `X-Correlation-Id`
-- **Value:** `prueba-123`
-
-Luego, en Grafana (Loki), puedes buscar logs relacionados con ese valor para ver la trazabilidad del request.
-
----
-
-### 4) Revisar telemetría en Grafana
-
-Entra a **Grafana** (`http://localhost:3000`) y revisa:
-
-- **Logs** (Loki): eventos del `demo-api` y de `sample-logs`
-- **Traces** (Tempo): trazas OTEL de la API
-- **Métricas** (Prometheus): métricas de apps y collector
-
-> Si no ves nada al principio, genera tráfico llamando varias veces al endpoint de transferencia.
-
----
-
-## Flujo de observabilidad
-
-### A) `demo-api`
-1. Se llama `POST /api/transactions/transfer`
-2. La API genera logs, trazas y métricas con OpenTelemetry
-3. Envía la telemetría al **OpenTelemetry Collector** (`otel-collector:4317`)
-4. El Collector distribuye:
-   - trazas → **Tempo**
-   - métricas → **Prometheus**
-   - logs → **Loki**
-5. **Grafana** consume esas fuentes y permite correlación
-
----
-
-### B) `sql-poller`
-1. El worker consulta SQL Server periódicamente
-2. Calcula métricas operativas (conteos, pendientes, ratios, antigüedad)
-3. Publica métricas vía OpenTelemetry
-4. El Collector las entrega a Prometheus
-5. Grafana las visualiza
-
----
-
-### C) `sample-logs` + Alloy
-1. Alloy lee logs desde archivos montados
-2. Los envía a Loki con labels
-3. Grafana consulta Loki y los muestra junto a logs de aplicaciones
-
----
-
-## Configuración clave
-
-### Variables de entorno importantes
-
-#### `SQLSERVER_CONN`
-Connection string para `sql-poller`.
-
-Ejemplo de formato:
-```text
-Server=mi-servidor;Database=MiBD;User Id=usuario;Password=clave;TrustServerCertificate=True
-```
-### `demo-api`
-- Corre en modo `Development` dentro del compose
-- Envía telemetría OTLP al Collector (`otel-collector:4317`)
-
----
-
-### `sql-poller`
-- Toma conexión desde `SqlPoller__ConnectionString` (inyectada con `${SQLSERVER_CONN}`)
-- Usa `SqlPoller__IntervalSeconds` para la frecuencia de polling (en compose está en `30`)
-
----
-
-### OpenTelemetry Collector
-- Recibe OTLP por gRPC y HTTP
-- Exporta a:
-  - Tempo (trazas)
-  - Loki (logs)
-  - Prometheus (métricas)
-- También usa exporter `debug` (útil en demo, no en producción)
-
----
-
-### Alloy (logs de archivos)
-- Tiene `tail_from_end = true`
-  - Empieza a leer desde el final del archivo
-  - No reingesta automáticamente todo el histórico previo
-- Añade labels para identificar origen/tipo de log
+- **`SQLSERVER_CONN`**: Requerido por el `sql-poller`. Ejemplo `Server=171.3.0.58,1433;Database=MiDB;User Id=Usr;Password=Psw;TrustServerCertificate=True;`.
+- **MinIO Bindings**: Variables en `deploy/prod/.env` especifican S3 endpoints (Ej: `LOKI_S3_ENDPOINT=http://minio:9000` y `TEMPO_S3_ENDPOINT=minio:9000`).
 
 ---
 
 ## Troubleshooting
 
-### `sql-poller` no levanta
-**Causas probables:**
-- Falta `SQLSERVER_CONN`
-- Connection string inválida
-- SQL Server inaccesible
-- Tablas esperadas no existen o no hay permisos
-
-**Cómo revisarlo (sin consola):**
-- Abre Docker Desktop
-- Ve al contenedor `sql-poller`
-- Revisa logs de inicio
-
-**Qué deberías confirmar antes de culpar al código:**
-- ¿La BD y tablas realmente existen?
-- ¿El usuario tiene permisos de lectura?
-- ¿La red permite conexión desde Docker?
+- **Crash del `sql-poller` en inicio:** Revisa dependencias de red del SQL Docker. Confirma también si las tablas `Transferencia` y `TransferenciaInterbancaria` existen físicamente. Ve a Docker Desktop y revisa sus logs.
+- **Loki o Tempo arrojan errores S3 "No bucket found" en MinIO:** Significa que el contenedor aprovisionador (`minio-init`) falló la rápida inyección inicial del script `mc` al levantar los composes. Reiniciar el bundle general de Docker por lo general resuelve este comportamiento asíncrono.
+- **Data vacía inicial:** Si corres Alloy bajo el comando de `tail_from_end: true`, este solo escuchará logs NUEVOS generados. Agrega nuevas líneas o toca los archivos de texto bajo `sample-logs/`.
 
 ---
 
-### No aparecen métricas en Prometheus/Grafana
-**Qué revisar:**
-- `demo-api` y/o `sql-poller` están activos
-- `otel-collector` está corriendo
-- Prometheus está levantado
-- Hay tráfico generado (si no llamas la API, habrá poca señal)
+## Seguridad y Recomendaciones de Producción
 
-**Revisión visual recomendada:**
-1. Grafana → Explore → Prometheus
-2. Busca métricas relacionadas con OTEL / runtime / servicio
-3. Si no hay datos, revisa logs del Collector en Docker Desktop
+Para elevar este stack al estricto estándar productivo real y evitar incidencias graves, se deben aplicar obligatoriamente los siguientes parches de infraestructura detectados en auditoría técnica:
 
-> Error común: asumir que Prometheus scrapea directo a `demo-api`. En este stack, scrapea al **Collector**.
+1. **Parcheo de Variables de Config Loki (CRÍTICO):**  
+   Por defecto, al llamar en red `${VAR}` desde un yaml de Loki asume un string literal. Debes inyectar el arg `-config.expand-env=true` mediante el bloque `command` del propio base yaml o de las dependencias prod para asegurar que Loki conecte al hostname correcto del S3.
 
----
+2. **Protección *OOM* por Límites de Recursos (RAM/CPU):**  
+   Fuerte uso de Prometheus o el Alloy puede saturar la RAM completa del sistema host matando al nodo entero. Define limites usando *Docker Deploy Limits*:
+   ```yaml
+   deploy:
+     resources:
+       limits:
+         memory: 2G
+   ```
 
-### No aparecen logs de `sample-logs` en Loki
-**Qué revisar:**
-- Que la carpeta `sample-logs/` tenga archivos
-- Que Alloy esté corriendo
-- Que las rutas coincidan con las definidas en la config
-- Que entiendas el efecto de `tail_from_end = true`
+3. **Retención de Logs Internos de Docker:**  
+   Todo contenedor escupe output hacia el daemon de Docker (generalmente en pesado JSON). Añadir el driver a cada nodo mayor limitando histórico a `50m` impedirá reventar el disco de log base de la propia maquina anfitriona.
 
-**Señal de diagnóstico útil:**
-- En Grafana → Explore → Loki, intenta listar labels y filtrar por `source=alloy-file`
-
----
-
-### Grafana abre pero no ves dashboards
-Eso es esperable en el estado actual del repo.
-
-**Razón:** el repo provisiona **datasources**, pero no dashboards listos para usar.
-
----
-
-## Mejoras sugeridas
-
-### Prioridad alta
-- [ ] Agregar dashboards versionados (JSON) y provisioning real
-- [ ] Agregar healthchecks en `docker-compose.yml`
-- [ ] Documentar nombres exactos de métricas exportadas
-- [ ] Parsing real de JSON en Alloy (stages/pipeline), no solo labels
-- [ ] Alertas básicas (Prometheus/Grafana Alerting) para fallos del `sql-poller`
-
-### Prioridad media
-- [ ] Separar configuraciones por ambiente (`dev`, `demo`, `prod`)
-- [ ] Reintentos/backoff más robustos en `sql-poller`
-- [ ] Limpiar artefactos de plantilla (`weatherforecast`)
-- [ ] Tests de integración para `demo-api` y consultas SQL
-
-### Prioridad baja
-- [ ] Ajustar `sql-poller` a SDK de Worker (más coherente semánticamente)
-- [ ] Añadir ejemplos de consultas de Loki / PromQL / TraceQL
-- [ ] Añadir scripts/generador de tráfico para la API demo
-
----
-
-## Seguridad (importante)
-
-Este stack está orientado a **entornos locales de prueba**. No lo despliegues en producción tal como está sin:
-
-- credenciales seguras
-- autenticación/autorización
-- TLS
-- endurecimiento de contenedores
-- gestión de secretos
-- límites de recursos
-- retención/almacenamiento adecuados
-
----
-
-## Notas finales
-
-La arquitectura base está bien encaminada para observabilidad (Collector + Prometheus/Loki/Tempo + Grafana), pero todavía le faltan piezas operativas clave:
-
-- dashboards
-- alertas
-- healthchecks
-- documentación de métricas
-- hardening
-
-Conclusión directa: **es un laboratorio funcional**, no una solución terminada.
----
+4. **Autenticación Fuerte de Secretos .ENV:**  
+   Migrar el `deploy/prod/.env` provisto a **Docker Secrets** auténticos o manejadores como AWS Secrets Manager / Vault, ocultando las credenciales planas y débiles incrustadas para SMTP y MinIO Admin.

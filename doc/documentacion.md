@@ -1,132 +1,161 @@
-﻿# obs-bank-v2 - Documentación Técnica
+# obs-bank-v2 - Documentación Técnica
 
-Stack de **observabilidad end-to-end** orientado a un escenario bancario (simulado), construido con **.NET 9 + OpenTelemetry + Grafana (Prometheus/Loki/Tempo)** y orquestado con **Docker Compose**.
+Stack de **observabilidad end-to-end** orientado a un escenario bancario (simulado), construido con **.NET 9 + OpenTelemetry + Grafana (Prometheus/Loki/Tempo)** y orquestado con **Docker Compose**. 
 
-> **Importante:** Este repositorio **no es un core bancario** ni una banca completa. Es un **sandbox/laboratorio de observabilidad** diseñado para demostrar la integración de telemetría y su maduración hacia entornos productivos.
+> **Importante:** Este repositorio **no es un core bancario** ni una banca completa. Es un **sandbox/laboratorio de observabilidad** diseñado para demostrar la integración de telemetría y su maduración hacia entornos productivos, y ahora incluye la emisión de alertas a dispositivos móviles Android.
 
 ---
 
 ## Tabla de contenido
 - [Qué hace este proyecto](#qué-hace-este-proyecto)
 - [Arquitectura](#arquitectura)
-- [Componentes](#componentes)
+- [Componentes Centrales](#componentes-centrales)
 - [Estructura del Repositorio](#estructura-del-repositorio)
+- [Pre-requisitos y Configuración Clave](#pre-requisitos-y-configuración-clave)
 - [Despliegue y Ambientes](#despliegue-y-ambientes)
 - [Flujo de Observabilidad y Uso Rápido](#flujo-de-observabilidad-y-uso-rápido)
-- [Configuración Clave](#configuración-clave)
+- [Alertas Móviles: Integración con Android y Firebase (FCM)](#alertas-móviles-integración-con-android-y-firebase-fcm)
+- [Referencia a la Aplicación Android Móvil](#referencia-a-la-aplicación-android-móvil)
 - [Troubleshooting](#troubleshooting)
 - [Seguridad y Recomendaciones de Producción](#seguridad-y-recomendaciones-de-producción)
 
 ---
 
 ## Qué hace este proyecto
-Este proyecto centraliza telemetría (logs, métricas y trazas) desde distintas fuentes:
-1. **Aplicaciones .NET instrumentadas con OpenTelemetry** (`demo-api` y `sql-poller`).
+Este proyecto centraliza telemetría (logs, métricas y trazas) desde distintas fuentes y reacciona ante anomalías:
+1. **Aplicaciones .NET instrumentadas con OpenTelemetry** (`demo-api` conectado a base de datos externa y `sql-poller`).
 2. **Logs de archivos locales** ingeridos por **Grafana Alloy**.
 3. **Backend de observabilidad** basado en el ecosistema de Grafana (Prometheus, Loki, Tempo).
+4. **Alertamiento Activo** enviando notificaciones push a dispositivos móviles a través de un Bridge a Firebase Cloud Messaging.
 
 ### Casos de uso
-- Probar OpenTelemetry en .NET.
-- Validar pipelines OTLP → Collector → Grafana stack.
-- Configurar backends escalables usando MinIO (S3) para almacenamiento de logs y trazas en un contexto casi real.
-- Exponer métricas operativas obtenidas desde fuentes externas de base de datos SQL.
+- Probar OpenTelemetry en .NET y validar pipelines OTLP → Grafana stack.
+- Simular flujos de transacciones monetarias persistentes usando Entity Framework Core sobre SQL Server.
+- Exponer y monitorear operativamente bases de datos SQL transaccionales.
+- Validar arquitecturas *Push* para que Grafana alerte directamente a dispositivos Android en tiempo real separando la app móvil por completo del stack de observabilidad.
 
 ---
 
 ## Arquitectura
 
-La arquitectura soporta dos métodos de almacenamiento principales dependiendo del entorno configurado: **Local (Filesystem)** para desarrollo rápido y **Producción (Object Storage S3 con MinIO)**.
+La arquitectura soporta telemetría y alerta en tiempo real.
 
 ```text
-                     ┌────────────────────────────┐
-                     │        demo-api (.NET 9)   │
-                     │  - Logs, Traces, Metrics   │
-                     └─────────────┬──────────────┘
-                                   │ OTLP (4317)
-                                   ▼
-                     ┌────────────────────────────┐
-                     │  OpenTelemetry Collector   │
-                     └───────┬─────────┬──────────┘
-                             │         │
-                  metrics    │         │ logs, traces
-                             ▼         ▼
-                     ┌────────────┐  ┌───────────┐  ┌───────────┐
-                     │ Prometheus │  │   Loki    │  │   Tempo   │
-                     └─────┬──────┘  └─────┬─────┘  └─────┬─────┘
-                           │               │              │
-                           │               ▼              ▼
-                           │         [Almacenamiento S3 / MinIO] * (En Producción)
-                           └───────────────┬──────────────┘
-                                           │
-                                           ▼
-                                     ┌──────────┐
-                                     │ Grafana  │
-                                     └──────────┘
+                               ┌───────────────────────────────────┐
+                               │  Base de Datos SQL Server         │
+                               │  (EconetTransacciones)            │
+                               └─────────┬───────────────┬─────────┘
+                                         │               │
+  ┌────────────────────────────┐         │        ┌──────┴──────────────┐
+  │        demo-api (.NET 9)   │◄────────┘        │ sql-poller (.NET 9) │
+  │ Transacciones & Telemetría │EF Core           │ Métricas Negocio    │
+  └─────────────┬──────────────┘                  └──────┬──────────────┘
+                │ OTLP (4317)                            │ OTLP (4317)
+                ▼                                        ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │                    OpenTelemetry Collector                    │
+  └───────┬────────────────────────┬─────────────────────┬────────┘
+          │                        │                     │
+       metrics                     │                logs, traces
+          ▼                        ▼                     ▼
+  ┌────────────┐             ┌───────────┐         ┌───────────┐
+  │ Prometheus │             │   Loki    │         │   Tempo   │
+  └─────┬──────┘             └─────┬─────┘         └─────┬─────┘
+        │                          │                     │
+        ▼                          ▼                     ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │                            Grafana                            │
+  │                     Dashboards & Alerting                     │
+  └────────────────────────┬──────────────────────────────────────┘
+                           │ Webhook (Contact Point)
+                           ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │                     FCM Bridge (.NET 9)                       │
+  │                  (Traducción a Firebase)                      │
+  └────────────────────────┬──────────────────────────────────────┘
+                           │ Firebase Cloud Messaging (FCM)
+                           ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │                 App Móvil Android (Topics)                    │
+  │         [obsbank-critical] [warning] [info]                   │
+  └───────────────────────────────────────────────────────────────┘
 ```
-
-Componentes adicionales inyectan datos al stack:
-- **`sql-poller`**: Consulta un servidor SQL externo y expone métricas operativas de forma constante enviándolas al Collector.
-- **`Grafana Alloy`**: Observa el directorio físico `sample-logs/` ingestando estos logs sueltos a Loki de forma estructurada.
 
 ---
 
-## Componentes
+## Componentes Centrales
 
-### 1) `demo-api` (API demo en .NET 9)
-Expone `/health` y `POST /api/transactions/transfer`. Emite logs enriquecidos, trazas distribuidas y métricas por OTLP usando la telemetría .NET predeterminada y personalizada al Collector. Integra y reenvía headers tipo `X-Correlation-Id` en las requests.
+### 1) `demo-api` (Simulador Transaccional en .NET 9)
+Actúa como un core bancario simplificado. 
+- Expone `GET /health`.
+- Expone los endpoints `POST /api/v1/transferencias/internas` e `interbancarias` para la creación inicial.
+- **Novedad:** Expone los endpoints `PUT /api/v1/transferencias/internas/{id}/estado` e `interbancarias/{id}/estado` para simular fallos operativos manualmente (estados 4, 5 o 9).
+- **Novedad:** Inserta registros funcionales en la BD SQL `EconetTransacciones` mediante Entity Framework Core.
+- Emite logs estructurados, trazas y métricas OTLP.
 
 ### 2) `sql-poller`
-Worker standalone de .NET que lee constantemente métricas de negocio desde una base de datos utilizando `SQLSERVER_CONN`. Genera métricas operativas en formato OpenTelemetry (indicadores de transferencias, tiempos).
+Worker de .NET que consulta métricas de negocio directamente desde `EconetTransacciones` y envía a OTel métricas como contadores y tiempos.
 
-### 3) OpenTelemetry Collector
-Recibe métricas, logs y trazas a través del de los receivers OTLP gRPC/HTTP (`4317`/`4318`) y las enruta a través de diversos *pipelines* hacia Prometheus (`:8889`), Loki y Tempo de forma unificada.
+### 3) `fcm-bridge` (Servicio Puente de Notificaciones)
+Microservicio backend que recibe payloads estándar de Grafana Webhooks. Valida la autenticación, mapea la severidad de la alerta y empuja mediante Firebase Admin SDK una notificación Push al tópico FCM correspondiente.
 
 ### 4) Stack de Almacenamiento y Visualización
-- **Prometheus**: Realiza *scraping* de métricas expuestas en el Collector (`:8889`).
-- **Loki**: Sistema de manejo de logs altamente escalable (optimizado usando meta-labels).
-- **Tempo**: Backend ligero de trazas distribuidas. 
-- **MinIO (Sólo Prod)**: Nodo S3 compatible que otorga *object storage* a las estructuras de Loki y Tempo para archivar grandes volúmenes de datos en paralelo.
-- **Grafana**: Panel visual universal centralizado (interfaz expuesta en `localhost:3000`).
+- **OTel Collector**: Enruta métricas, traces y logs.
+- **Prometheus, Loki y Tempo**: Motores de series temporales, logs indexados y trazas. MinIO (S3) se activa sólo en modo Producción.
+- **Grafana Alloy**: Componente alternativo de ingesta física de logs en `sample-logs/`.
+
+### 5) Aplicación Móvil Android (ObsBankAlerts)
+- Es el destino asíncrono y final de todo este flujo Push de notificaciones. Trabaja mediante su registro de canales FCM.
+- **Historial Interactivo**: Muestra un listado ordenado (`RecyclerView`) de las últimas 50 alertas guardadas localmente mediante tarjetas expansibles.
+- **Indicadores de Severidad**: Decodifica el payload para pintar estéticamente la tarjeta según la urgencia (Rojo = Crítico, Naranja = Warning, Azul = Info) y emitir sonidos distintos en Android.
+- *Consulta [`doc/app-movil.md`](app-movil.md) para más detalles.*
 
 ---
 
 ## Estructura del Repositorio
 
-La arquitectura cuenta con su rama original base, sumándole un subdirectorio con "overrides" destinados al despliegue productivo.
-
 ```text
 obs-bank-v2/
-├─ docker-compose.yml           # Definición de servicios base (Modo Local/Desarrollo)
-├─ deploy/
-│  └─ prod/                     # Directivas compose y configuraciones para Producción
-│     ├─ .env                   # Variables de entorno y contraseñas
-│     ├─ docker-compose.prod.yml
-│     ├─ docker-compose.minio.yml
-│     ├─ docker-compose.loki-s3.yml
-│     ├─ docker-compose.tempo-s3.yml
-│     └─ docker-compose.loki-config-prod.yml
-├─ observability/               # Mapeo de Volúmenes y configuraciones nativas
-│  ├─ loki-config.yml           # Configuración Local (filesystem storage)
-│  └─ loki-config.prod.yml      # Configuración Prod (S3 block storage)
-├─ sample-logs/                 # Ejemplos de logs recogidos por Alloy
-└─ services/                    # Código fuente base .NET 9 API y Workers
+├─ docker-compose.yml           # Definición de servicios base locales
+├─ deploy/prod/                 # Configuración para Producción (MinIO / S3 Archiving)
+│  └─ .env                      # Variables de entorno prod (SMTP, S3)
+├─ observability/               # Mapeo de Volúmenes y configs nativas
+│  ├─ certs/                    # Ubicación para llaves, como firebase-service-account.json
+│  └─ grafana/                  # Dashboards auto-aprovisionados, LDAP, etc.
+└─ services/                    # Código fuente base .NET 9 API, Poller y FCM Bridge
 ```
+
+---
+
+## Pre-requisitos y Configuración Clave
+
+Para ejecutar el proyecto, renombra a `.env` si es necesario y edita los valores globales. Como componente integrado externo necesitarás atender a los siguientes puntos críticos:
+
+1. **SQLSERVER_CONN (Base de Datos):** 
+   Ambos (`demo-api` y `sql-poller`) exigen conectividad a una base de datos `EconetTransacciones` con las tablas `Transferencia` y `TransferenciaInterbancaria` creadas.
+   - *Ejemplo:* `SQLSERVER_CONN=Server=MI_IP;Database=EconetTransacciones;Trusted_Connection=True;TrustServerCertificate=True;`
+
+2. **Keys de Firebase (`FCM Bridge`):**
+   Para que el puente logre despachar alertas al celular, Docker montará la identidad de Google. 
+   - Debes colocar tu llave de cuenta de servicio de Firebase allí: `./observability/certs/firebase-service-account.json`.
+
+3. **Autenticación del Webhook (`BRIDGE_API_KEY`):**
+   Contraseña (Bearer) mediante la cual Grafana podrá interactuar con el FCM Bridge.
 
 ---
 
 ## Despliegue y Ambientes
 
-Antes de iniciar cualquier comando, asegúrate de detener arquitecturas previamente subidas del mismo puerto para evitar colisión de hosts.
+Antes de iniciar, detén contenedores que usen puertos como `3000` (Grafana), `5000` (DemoAPI), `5001` (FCMBridge), etc.
 
 ### Opción A: Entorno Local (Desarrollo Rápido)
-Modo rápido y liviano. Evita MinIO usando el almacenamiento base del disco.
+Evita MinIO/S3 usando sistema de archivos regular de Docker.
 ```bash
 docker-compose up --build -d
 ```
-> **Nota Opcional:** Si no definiste un servidor de base de datos válido en la variable global `SQLSERVER_CONN`, el contenedor `sql-poller` arrojará excepciones de inicialización.
 
 ### Opción B: Entorno Producción (Arquitectura S3 Storage)
-Se superponen y combinan archivos compose del directorio `deploy/prod/`. Esto inicializa a MinIO con un contenedor auxiliar aprovisionando automáticamente los *buckets* `loki` y `tempo`.
+Exige dependencias extra (combina archivos Compose para lanzar MinIO y habilitar Multi-Tenant logs).
 ```bash
 docker-compose -f docker-compose.yml \
   -f deploy/prod/docker-compose.prod.yml \
@@ -141,50 +170,55 @@ docker-compose -f docker-compose.yml \
 
 ## Flujo de Observabilidad y Uso Rápido
 
-1. **Uso Mínimo de la API**:
-   - Comprobación: GET `http://localhost:5000/health`
-   - Transacción: POST `http://localhost:5000/api/transactions/transfer` (Puedes adjuntar en la cabecera del Request HTTP o Postman: `X-Correlation-Id: test-trace-123`).
+1. **Operación Transaccional**:
+   Dianas a los nuevos endpoints interactuando con Swagger en `http://localhost:5000/swagger`.
+   O bien, envía un POST a `http://localhost:5000/api/v1/transferencias/internas` (puedes inyectar tu `X-Correlation-Id: mibanco-123`).
+   Verás que el retorno será un **Identity ID** real persistido directamente en SQL Server.
 
-2. **Visualizar y Correlacionar**:
-   - Navega al **Grafana** (`http://localhost:3000` — Login: `admin`/`admin`).
-   - Ve a `Explore` y busca en el *datasource* de Loki tu log asociado al *correlation ID* enviado durante el HTTP POST.
-   - Observa si el log lleva asociado un Trace ID, y presiona el enlace generado para que te redirija al datasource de Tempo, mostrando el flujo interno estructurado.
+2. **Correlación de Traza-Logs**:
+   En Grafana (`http://localhost:3000`), usando el "Explorer" (Data sources: Loki & Tempo), filtra por tu Correlation ID. Si encuentras un Log de la Demo Api, verás el enlace al Trace para ver todo el recorrido exacto de tiempo que le tomó hacer el Insert en base de datos.
 
 ---
 
-## Configuración Clave
+## Alertas Móviles: Integración con Android y Firebase (FCM)
 
-- **`SQLSERVER_CONN`**: Requerido por el `sql-poller`. Ejemplo `Server=171.3.0.58,1433;Database=MiDB;User Id=Usr;Password=Psw;TrustServerCertificate=True;`.
-- **MinIO Bindings**: Variables en `deploy/prod/.env` especifican S3 endpoints (Ej: `LOKI_S3_ENDPOINT=http://minio:9000` y `TEMPO_S3_ENDPOINT=minio:9000`).
+**Rol de la aplicación móvil (ObsBank Alerts)**
+La App Android se ha diseñado intencionalmente manteniéndose *absolutamente agnóstica* de Grafana o nuestro stack de Observabilidad. Sus únicas responsabilidades son registrarse en Firebase, obtener su token, y suscribirse explícitamente a los diferentes *topics* de severidad: `obsbank-critical`, `obsbank-warning` y `obsbank-info`. No hace consultas (Pull) al backend; reacciona a los Webhooks (Push).
+
+**Cómo conectar la plataforma para activar las alertas en la APK:**
+
+1. **Sincronización Firebase:** La app y el Bridge deben estar en el mismo Proyecto Firebase (`google-services.json` compilado en APK, y `firebase-service-account.json` montado en el docker de la BD).
+2. **Setup en Grafana (Contact Point):** 
+   - Dentro de *Alerting*, crea un *Contact Point* Webhook.
+   - Apunta al endpoint interno de la red docker: `http://fcm-bridge:8080/alert`. (Ojo: puerto nativo vs puerto expuesto).
+   - Añade un Custom Header -> `Authorization: Bearer <TU_BRIDGE_API_KEY>`.
+3. **Notification Policies:**
+   - Asigna tu nueva regla para que Grafana dirija alertas por severidad a este nuevo Webhook en vez de solo enviar un Email.
+4. **Validación:**
+   Cuando Grafana detecte anomalías (ej: `sql-poller` advierte de transferencias falladas masivas), derivará a Webhook -> FCM Bridge procesa -> Firebase empuja a la severidad adecuada -> Tu dispositivo emite la notificación push y se guarda en *SharedPreferences*.
+
+---
+
+## Referencia a la Aplicación Android Móvil
+Puedes revisar de manera independiente toda la arquitectura asociada a la App móvil en Android consultando el documento de arquitectura dedicado: [**Documentación ObsBankAlerts (`app-movil.md`)**](app-movil.md). 
+Para comprender a fondo los errores y sentencias que originan todo el ecosistema de alertas de Grafana, recuerda leer la [**Guía de Errores Operativos (`mensajes_de_errores.md`)**](mensajes_de_errores.md) y documentación de [**Métricas SQL (`queries.md`)**](queries.md) para un entendimiento total y absoluto.
 
 ---
 
 ## Troubleshooting
 
-- **Crash del `sql-poller` en inicio:** Revisa dependencias de red del SQL Docker. Confirma también si las tablas `Transferencia` y `TransferenciaInterbancaria` existen físicamente. Ve a Docker Desktop y revisa sus logs.
-- **Loki o Tempo arrojan errores S3 "No bucket found" en MinIO:** Significa que el contenedor aprovisionador (`minio-init`) falló la rápida inyección inicial del script `mc` al levantar los composes. Reiniciar el bundle general de Docker por lo general resuelve este comportamiento asíncrono.
-- **Data vacía inicial:** Si corres Alloy bajo el comando de `tail_from_end: true`, este solo escuchará logs NUEVOS generados. Agrega nuevas líneas o toca los archivos de texto bajo `sample-logs/`.
+- **Crash del `sql-poller` o `demo-api` al Iniciar:** 
+  Verifica que tu host y puerto desde `SQLSERVER_CONN` admiten acceso desde un entorno de contenedores, a menudo requiere usar `host.docker.internal` en lugar de `localhost`.
+- **Bridge Error (Token Invalid):**
+  Asegúrate que la `BRIDGE_API_KEY` coincida milimétricamente entre tu `.env` de docker y lo que digitaste en el *Contact Point* de Grafana y que el archivo `.json` de Google esté debidamente inyectado en `/observability/certs/`.
+- **Pérdida de S3 / Buckets no Encontrados:**
+  Ocasionalmente la inicialización asíncrona tipo *job* (minio-init) puede retardarse frente a Loki. Un reinicio usual del stack solucionará la disponibilidad asíncrona de AWS CLI creando los buckets.
 
 ---
 
 ## Seguridad y Recomendaciones de Producción
 
-Para elevar este stack al estricto estándar productivo real y evitar incidencias graves, se deben aplicar obligatoriamente los siguientes parches de infraestructura detectados en auditoría técnica:
-
-1. **Parcheo de Variables de Config Loki (CRÍTICO):**  
-   Por defecto, al llamar en red `${VAR}` desde un yaml de Loki asume un string literal. Debes inyectar el arg `-config.expand-env=true` mediante el bloque `command` del propio base yaml o de las dependencias prod para asegurar que Loki conecte al hostname correcto del S3.
-
-2. **Protección *OOM* por Límites de Recursos (RAM/CPU):**  
-   Fuerte uso de Prometheus o el Alloy puede saturar la RAM completa del sistema host matando al nodo entero. Define limites usando *Docker Deploy Limits*:
-   ```yaml
-   deploy:
-     resources:
-       limits:
-         memory: 2G
-   ```
-
-3. **Retención de Logs Internos de Docker:**  
-   Todo contenedor escupe output hacia el daemon de Docker (generalmente en pesado JSON). Añadir el driver a cada nodo mayor limitando histórico a `50m` impedirá reventar el disco de log base de la propia maquina anfitriona.
-
-4. **Autenticación Fuerte de Secretos .ENV:**  
-   Migrar el `deploy/prod/.env` provisto a **Docker Secrets** auténticos o manejadores como AWS Secrets Manager / Vault, ocultando las credenciales planas y débiles incrustadas para SMTP y MinIO Admin.
+Para elevar este stack al estricto estándar productivo real y evitar incidencias graves, aplica los siguientes parches de infraestructura detectados en auditoría técnica:
+1. **Protección *OOM*:** Grafana, LTS Prometheus y Alloy pueden devorar la memoria del Host Node afectando servicios de base de datos colindantes. Aplica rigurosos Deploy Limits en tu Compose.
+2. **Retención nativa de Docker:** Configura el log driver predeterminado del Daemon docker con `max-size: 50m` y `max-file: 3` para prevenir un disk flush out.
+3. **Migración a Bóvedas K/V Activas:** Evita los archivos `.env` planos y transita tu modelo de contraseñas de Grafana y Firebase JSON hacia el inyector de *Docker Secrets*, AWS Secrets Manager, o Hashicorp Vault para protección frente a fugas de código fuente.

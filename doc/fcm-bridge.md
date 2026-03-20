@@ -12,7 +12,7 @@ El bridge expone un único endpoint seguro (`POST /alert`) que:
 1. Recibe el *webhook* en formato JSON estándar de Grafana.
 2. Identifica la etiqueta (`label`) `severity` dentro de `commonLabels` (critical, warning, info).
 3. Parsea el título y cuerpo del mensaje.
-4. Redirige (Push) el mensaje al *Topic* exacto de la App Android (`obsbank-critical`, `obsbank-warning` u `obsbank-info`).
+4. Redirige (Push) el mensaje al *Topic* exacto de la App Android [**ObsBankAlerts**](app-movil.md) (`obsbank-critical`, `obsbank-warning` u `obsbank-info`).
 
 ---
 
@@ -71,3 +71,13 @@ curl -X POST http://localhost:5001/alert \
 Como en el cURL anterior mapeamos `"severity": "critical"`, el bridge lo transmutará mágicamente como una solicitud POST hacia el Firebase Platform Cloud dirigido al topic: **`obsbank-critical`**. 
 
 Si disparas otro con `"severity" : "warning"`, lo dirijirá al topic `obsbank-warning`.
+
+---
+
+## 🔔 4. Configuración de Etiquetas (Labels)
+
+El **FCM Bridge** y la **Aplicación Android** dependen críticamente de la etiqueta `severity` incrustada por Grafana. Cuando crees una regla de alerta en Grafana, debes agregar un "Custom Label" llamado `severity`.
+
+- **`severity = critical`**: Dispara notificaciones al topic de Firebase `obsbank-critical`. En la app Android el canal emite sonido de alarma alta prioritaria, y la tarjeta expansible brilla con un indicador lateral **Rojo 🔴**. Úsalo para errores catastróficos o bloqueantes (ej. fallos en transferencias interbancarias 5 o 9).
+- **`severity = warning`**: Dispara notificaciones al topic de Firebase `obsbank-warning`. En la app Android se resalta la alerta en color **Naranja 🟠**. Úsalo para advertencias o fallos operativos de menor impacto (ej. transferencias internas rechazadas).
+- **`severity = info`**: O cualquier etiqueta no reconocida enviará el Payload silencioso a `obsbank-info` dibujando una tarjeta **Azul 🔵** sin interrumpir al usuario drásticamente.

@@ -1,4 +1,4 @@
-using Bank.Obs.DemoApi.Auth;
+ï»¿using Bank.Obs.DemoApi.Auth;
 using Bank.Obs.DemoApi.Endpoints;
 using Bank.Obs.DemoApi.Middleware;
 using Bank.Obs.DemoApi.Observability;
@@ -12,6 +12,8 @@ using Serilog;
 using Serilog.Formatting.Compact;
 using System.Threading.RateLimiting;
 using StackExchange.Redis;
+using Microsoft.EntityFrameworkCore;
+using Bank.Obs.DemoApi.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,7 +38,7 @@ if (builder.Environment.IsProduction())
 }
 
 // --- Auth ---
-// Dev: auth “fake” para probar [Authorize] sin IdP real (requiere header Authorization).
+// Dev: auth ï¿½fakeï¿½ para probar [Authorize] sin IdP real (requiere header Authorization).
 // Prod: JwtBearer real.
 if (builder.Environment.IsDevelopment())
 {
@@ -77,6 +79,10 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddControllers();
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+// --- Entity Framework Core Context ---
+var connectionString = Environment.GetEnvironmentVariable("SQLSERVER_CONN") ?? builder.Configuration.GetConnectionString("EconetConnection");
+builder.Services.AddDbContext<EconetDbContext>(op => op.UseSqlServer(connectionString));
 
 // --- Idempotency store (demo in-memory) ---
 var idempProvider = builder.Configuration["Idempotency:Provider"] ?? "InMemory";
@@ -172,3 +178,4 @@ app.MapHealth(meta);
 app.MapControllers();
 
 app.Run();
+

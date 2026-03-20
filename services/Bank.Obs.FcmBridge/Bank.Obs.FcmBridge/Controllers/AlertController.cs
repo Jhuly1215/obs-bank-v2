@@ -47,9 +47,11 @@ public class AlertController : ControllerBase
 
         if (result.Success)
         {
+            _logger.LogInformation("Alerta enviada correctamente. MessageId: {MessageId}", result.MessageId);
             return Ok(new { success = true, topic = result.Topic, messageId = result.MessageId });
         }
 
+        _logger.LogError("Error al enviar alerta a FCM: {Details}", result.ErrorMessage);
         return StatusCode(500, new { error = "Fallo interno al despachar alerta a Firebase", details = result.ErrorMessage });
     }
 }

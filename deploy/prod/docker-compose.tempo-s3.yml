@@ -1,0 +1,10 @@
+services:
+  tempo:
+    env_file:
+      - ./deploy/prod/.env
+    environment:
+      TEMPO_S3_BUCKET: "${TEMPO_S3_BUCKET}"
+      TEMPO_S3_ENDPOINT: "${TEMPO_S3_ENDPOINT}"
+      TEMPO_S3_ACCESS_KEY: "${TEMPO_S3_ACCESS_KEY}"
+      TEMPO_S3_SECRET_KEY: "${TEMPO_S3_SECRET_KEY}"
+      TEMPO_S3_INSECURE: "${TEMPO_S3_INSECURE}"

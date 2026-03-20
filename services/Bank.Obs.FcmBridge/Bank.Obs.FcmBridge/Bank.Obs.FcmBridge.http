@@ -1,0 +1,6 @@
+@Bank.Obs.FcmBridge_HostAddress = http://localhost:5269
+
+GET {{Bank.Obs.FcmBridge_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

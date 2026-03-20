@@ -57,6 +57,7 @@ node_modules/
 
 appsettings.Development.json
 appsettings.*.local.json
+/observability/certs/firebase-service-account.json
 
 ############################
 # ?? Coverage
@@ -72,6 +73,8 @@ coverage/
 
 publish/
 out/
+deploy/prod/.env
+**/.env
 
 ############################
 # ?? Database / Temp

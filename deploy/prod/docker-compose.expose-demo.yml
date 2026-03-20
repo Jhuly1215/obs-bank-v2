@@ -1,0 +1,4 @@
+services:
+  demo-api:
+    ports:
+      - "5000:8080"

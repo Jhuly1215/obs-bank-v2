@@ -1,535 +1,224 @@
-﻿# obs-bank-v2
+# obs-bank-v2 - Documentación Técnica
 
-Stack de **observabilidad end-to-end** orientado a un escenario bancario (simulado), construido con **.NET 9 + OpenTelemetry + Grafana (Prometheus/Loki/Tempo)** y orquestado con **Docker Compose**.
+Stack de **observabilidad end-to-end** orientado a un escenario bancario (simulado), construido con **.NET 9 + OpenTelemetry + Grafana (Prometheus/Loki/Tempo)** y orquestado con **Docker Compose**. 
 
-> **Importante:** este repositorio **no es un core bancario** ni una banca completa. Es un **sandbox/laboratorio de observabilidad** con:
-> - una API demo (`demo-api`) que simula transferencias,
-> - un worker (`sql-poller`) que consulta SQL Server y expone métricas,
-> - y un stack de observabilidad para centralizar **logs, métricas y trazas**.
+> **Importante:** Este repositorio **no es un core bancario** ni una banca completa. Es un **sandbox/laboratorio de observabilidad** diseñado para demostrar la integración de telemetría y su maduración hacia entornos productivos, y ahora incluye la emisión de alertas a dispositivos móviles Android.
 
 ---
 
 ## Tabla de contenido
-
 - [Qué hace este proyecto](#qué-hace-este-proyecto)
 - [Arquitectura](#arquitectura)
-- [Componentes](#componentes)
-- [Estructura del repositorio](#estructura-del-repositorio)
-- [Tecnologías](#tecnologías)
-- [Requisitos](#requisitos)
-- [Cómo levantar el entorno](#cómo-levantar-el-entorno)
-- [Accesos y puertos](#accesos-y-puertos)
-- [Uso rápido](#uso-rápido)
-- [Flujo de observabilidad](#flujo-de-observabilidad)
-- [Configuración clave](#configuración-clave)
+- [Componentes Centrales](#componentes-centrales)
+- [Estructura del Repositorio](#estructura-del-repositorio)
+- [Pre-requisitos y Configuración Clave](#pre-requisitos-y-configuración-clave)
+- [Despliegue y Ambientes](#despliegue-y-ambientes)
+- [Flujo de Observabilidad y Uso Rápido](#flujo-de-observabilidad-y-uso-rápido)
+- [Alertas Móviles: Integración con Android y Firebase (FCM)](#alertas-móviles-integración-con-android-y-firebase-fcm)
+- [Referencia a la Aplicación Android Móvil](#referencia-a-la-aplicación-android-móvil)
 - [Troubleshooting](#troubleshooting)
-- [Limitaciones actuales](#limitaciones-actuales)
-- [Mejoras sugeridas](#mejoras-sugeridas)
+- [Seguridad y Recomendaciones de Producción](#seguridad-y-recomendaciones-de-producción)
 
 ---
 
 ## Qué hace este proyecto
+Este proyecto centraliza telemetría (logs, métricas y trazas) desde distintas fuentes y reacciona ante anomalías:
+1. **Aplicaciones .NET instrumentadas con OpenTelemetry** (`demo-api` conectado a base de datos externa y `sql-poller`).
+2. **Logs de archivos locales** ingeridos por **Grafana Alloy**.
+3. **Backend de observabilidad** basado en el ecosistema de Grafana (Prometheus, Loki, Tempo).
+4. **Alertamiento Activo** enviando notificaciones push a dispositivos móviles a través de un Bridge a Firebase Cloud Messaging.
 
-Este proyecto centraliza telemetría desde distintas fuentes:
-
-1. **Aplicaciones .NET instrumentadas con OpenTelemetry**
-   - `demo-api` (API mínima)
-   - `sql-poller` (worker de métricas desde SQL Server)
-
-2. **Logs de archivos locales**
-   - Ingeridos por **Grafana Alloy** desde `sample-logs/`
-
-3. **Backend de observabilidad**
-   - **Prometheus** (métricas)
-   - **Loki** (logs)
-   - **Tempo** (trazas)
-   - **Grafana** (visualización y correlación)
-
-### Casos de uso del repo
-- Probar OpenTelemetry en .NET
-- Validar pipelines OTLP → Collector → Grafana stack
-- Correlacionar logs/trazas/métricas en un flujo tipo “transferencia bancaria”
-- Exponer métricas operativas obtenidas desde SQL Server
+### Casos de uso
+- Probar OpenTelemetry en .NET y validar pipelines OTLP → Grafana stack.
+- Simular flujos de transacciones monetarias persistentes usando Entity Framework Core sobre SQL Server.
+- Exponer y monitorear operativamente bases de datos SQL transaccionales.
+- Validar arquitecturas *Push* para que Grafana alerte directamente a dispositivos Android en tiempo real separando la app móvil por completo del stack de observabilidad.
 
 ---
 
 ## Arquitectura
 
+La arquitectura soporta telemetría y alerta en tiempo real.
+
 ```text
-                     ┌────────────────────────────┐
-                     │        demo-api (.NET 9)   │
-                     │  - Logs OTEL               │
-HTTP :5000 ────────▶ │  - Traces OTEL             │
-                     │  - Metrics OTEL            │
-                     └─────────────┬──────────────┘
-                                   │ OTLP gRPC (4317)
-                                   ▼
-                     ┌────────────────────────────┐
-                     │  OpenTelemetry Collector   │
-                     │  Receivers: OTLP gRPC/HTTP │
-                     │  Pipelines: traces/metrics/logs
-                     └───────┬─────────┬──────────┘
-                             │         │
-                  metrics    │         │ logs
-               (Prom exp)    │         │
-                             ▼         ▼
-                     ┌────────────┐  ┌───────────┐
-                     │ Prometheus │  │   Loki    │
-                     └─────┬──────┘  └─────┬─────┘
-                           │               │
-                           └──────┬────────┘
-                                  ▼
-                            ┌──────────┐
-                            │ Grafana  │
-                            └────┬─────┘
-                                 │
-                                 ▼
-                              ┌──────┐
-                              │Tempo │
-                              └──────┘
-
-
-      ┌────────────────────────────┐           ┌───────────┐
-      │   sql-poller (.NET 9)      │ OTLP gRPC │ OTel Col. │
-      │ - consulta SQL Server      ├──────────▶│           │
-      │ - emite métricas OTEL      │           └───────────┘
-      └──────────────┬─────────────┘
-                     │ SQL Server (externo)
-                     ▼
-                [SQLSERVER_CONN]
-
-
-      ┌────────────────────────────┐
-      │ Grafana Alloy              │
-      │ - lee sample-logs          │
-      │ - envía a Loki             │
-      └──────────────┬─────────────┘
-                     ▼
-                    Loki
-
+                               ┌───────────────────────────────────┐
+                               │  Base de Datos SQL Server         │
+                               │  (EconetTransacciones)            │
+                               └─────────┬───────────────┬─────────┘
+                                         │               │
+  ┌────────────────────────────┐         │        ┌──────┴──────────────┐
+  │        demo-api (.NET 9)   │◄────────┘        │ sql-poller (.NET 9) │
+  │ Transacciones & Telemetría │EF Core           │ Métricas Negocio    │
+  └─────────────┬──────────────┘                  └──────┬──────────────┘
+                │ OTLP (4317)                            │ OTLP (4317)
+                ▼                                        ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │                    OpenTelemetry Collector                    │
+  └───────┬────────────────────────┬─────────────────────┬────────┘
+          │                        │                     │
+       metrics                     │                logs, traces
+          ▼                        ▼                     ▼
+  ┌────────────┐             ┌───────────┐         ┌───────────┐
+  │ Prometheus │             │   Loki    │         │   Tempo   │
+  └─────┬──────┘             └─────┬─────┘         └─────┬─────┘
+        │                          │                     │
+        ▼                          ▼                     ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │                            Grafana                            │
+  │                     Dashboards & Alerting                     │
+  └────────────────────────┬──────────────────────────────────────┘
+                           │ Webhook (Contact Point)
+                           ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │                     FCM Bridge (.NET 9)                       │
+  │                  (Traducción a Firebase)                      │
+  └────────────────────────┬──────────────────────────────────────┘
+                           │ Firebase Cloud Messaging (FCM)
+                           ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │                 App Móvil Android (Topics)                    │
+  │         [obsbank-critical] [warning] [info]                   │
+  └───────────────────────────────────────────────────────────────┘
 ```
 
 ---
-## Componentes
 
-### 1) `demo-api` (API demo en .NET 9)
+## Componentes Centrales
 
-API mínima instrumentada con OpenTelemetry que simula transferencias.
+### 1) `demo-api` (Simulador Transaccional en .NET 9)
+Actúa como un core bancario simplificado. 
+- Expone `GET /health`.
+- Expone los endpoints `POST /api/v1/transferencias/internas` e `interbancarias` para la creación inicial.
+- **Novedad:** Expone los endpoints `PUT /api/v1/transferencias/internas/{id}/estado` e `interbancarias/{id}/estado` para simular fallos operativos manualmente (estados 4, 5 o 9).
+- **Novedad:** Inserta registros funcionales en la BD SQL `EconetTransacciones` mediante Entity Framework Core.
+- Emite logs estructurados, trazas y métricas OTLP.
 
-#### Funcionalidad
-- Expone endpoint de health
-- Expone endpoint de transferencia simulada
-- Genera logs estructurados
-- Emite trazas y métricas por OTLP al OTel Collector
-- Usa `X-Correlation-Id` para correlación (si no llega, lo genera)
+### 2) `sql-poller`
+Worker de .NET que consulta métricas de negocio directamente desde `EconetTransacciones` y envía a OTel métricas como contadores y tiempos.
 
-#### Endpoints
-- `GET /health`
-- `POST /api/transactions/transfer`
+### 3) `fcm-bridge` (Servicio Puente de Notificaciones)
+Microservicio backend que recibe payloads estándar de Grafana Webhooks. Valida la autenticación, mapea la severidad de la alerta y empuja mediante Firebase Admin SDK una notificación Push al tópico FCM correspondiente.
 
-#### Qué **no** hace
-- No persiste transferencias
-- No implementa core bancario real
-- No integra con terceros reales
+### 4) Stack de Almacenamiento y Visualización
+- **OTel Collector**: Enruta métricas, traces y logs.
+- **Prometheus, Loki y Tempo**: Motores de series temporales, logs indexados y trazas. MinIO (S3) se activa sólo en modo Producción.
+- **Grafana Alloy**: Componente alternativo de ingesta física de logs en `sample-logs/`.
 
----
-
-### 2) `sql-poller` (worker de métricas desde SQL Server)
-
-Worker en .NET que consulta periódicamente un SQL Server externo y transforma resultados en métricas (via OpenTelemetry).
-
-#### Funcionalidad
-- Se ejecuta en background
-- Lee conexión desde `SQLSERVER_CONN`
-- Consulta tablas del dominio de transferencias
-- Calcula métricas operativas (conteos, pendientes, ratios, antigüedad)
-- Exporta métricas OTLP al Collector
-
-#### Dependencia clave
-Necesita acceso a SQL Server con tablas como:
-- `Transferencia`
-- `TransferenciaInterbancaria`
-
-> Si no defines `SQLSERVER_CONN`, este servicio fallará al iniciar.
+### 5) Aplicación Móvil Android (ObsBankAlerts)
+- Es el destino asíncrono y final de todo este flujo Push de notificaciones. Trabaja mediante su registro de canales FCM.
+- **Historial Interactivo**: Muestra un listado ordenado (`RecyclerView`) de las últimas 50 alertas guardadas localmente mediante tarjetas expansibles.
+- **Indicadores de Severidad**: Decodifica el payload para pintar estéticamente la tarjeta según la urgencia (Rojo = Crítico, Naranja = Warning, Azul = Info) y emitir sonidos distintos en Android.
+- *Consulta [`doc/app-movil.md`](app-movil.md) para más detalles.*
 
 ---
 
-### 3) OpenTelemetry Collector
-
-Punto central de recepción de telemetría.
-
-#### Pipelines
-- **traces** → Tempo
-- **metrics** → Prometheus exporter (`:8889`)
-- **logs** → Loki
-
-También tiene exporter `debug` (útil para demo; ruidoso en producción).
-
----
-
-### 4) Prometheus
-
-Hace scrape al endpoint de métricas expuesto por el Collector (`otel-collector:8889`) y a sí mismo.
-
-> No scrapea directamente `demo-api` ni `sql-poller`.
-
----
-
-### 5) Loki
-
-Backend de logs para:
-- logs enviados por OTel Collector (desde apps .NET)
-- logs de archivos enviados por Alloy
-
----
-
-### 6) Tempo
-
-Backend de trazas OpenTelemetry.
-
----
-
-### 7) Grafana
-
-UI de observabilidad con datasources provisionados:
-- Prometheus
-- Loki
-- Tempo
-
-Incluye provisioning de datasources, pero **no dashboards listos** (ver [Limitaciones actuales](#limitaciones-actuales)).
-
----
-
-### 8) Grafana Alloy
-
-Lee logs desde `sample-logs/` y los envía a Loki.
-
-#### Rutas esperadas (según config)
-- `InterbancariaAsyncAPI/*.log`
-- `TransaccionInternaApi/*.log`
-- `logsEconetTransacciones/*.json`
-- `logsEconetTransaccionesInterbancarias/*.json`
-
----
-
-## Estructura del repositorio
+## Estructura del Repositorio
 
 ```text
 obs-bank-v2/
-├─ docker-compose.yml
-├─ README.md
-├─ sample-logs/
-│  ├─ InterbancariaAsyncAPI/
-│  ├─ TransaccionInternaApi/
-│  ├─ logsEconetTransacciones/
-│  └─ logsEconetTransaccionesInterbancarias/
-├─ observability/
-│  ├─ otel-collector-config.yml
-│  ├─ prometheus.yml
-│  ├─ loki-config.yml
-│  ├─ tempo.yml
-│  ├─ alloy/
-│  │  └─ config.alloy
-│  └─ grafana/
-│     └─ provisioning/
-│        ├─ datasources/
-│        │  └─ datasources.yml
-│        └─ dashboards/
-│           └─ dashboards.yml
-└─ services/
-   ├─ Bank.Obs.DemoApi/
-   │  └─ Bank.Obs.DemoApi/
-   └─ Bank.Obs.SqlPoller/
-      └─ Bank.Obs.SqlPoller/
+├─ docker-compose.yml           # Definición de servicios base locales
+├─ deploy/prod/                 # Configuración para Producción (MinIO / S3 Archiving)
+│  └─ .env                      # Variables de entorno prod (SMTP, S3)
+├─ observability/               # Mapeo de Volúmenes y configs nativas
+│  ├─ certs/                    # Ubicación para llaves, como firebase-service-account.json
+│  └─ grafana/                  # Dashboards auto-aprovisionados, LDAP, etc.
+└─ services/                    # Código fuente base .NET 9 API, Poller y FCM Bridge
 ```
-## Tecnologías
-
-- **.NET 9**
-- **OpenTelemetry (OTLP)**
-- **OpenTelemetry Collector**
-- **Prometheus**
-- **Loki**
-- **Tempo**
-- **Grafana**
-- **Grafana Alloy**
-- **Docker Compose**
-- **SQL Server** (externo, para `sql-poller`)
 
 ---
 
-## Requisitos
+## Pre-requisitos y Configuración Clave
 
-### Requisitos mínimos
-- Docker
-- Docker Compose
-- (Opcional pero recomendado) SQL Server accesible si quieres usar `sql-poller`
+Para ejecutar el proyecto, renombra a `.env` si es necesario y edita los valores globales. Como componente integrado externo necesitarás atender a los siguientes puntos críticos:
 
-### Puertos libres (host)
-- `3000` (Grafana)
-- `3100` (Loki)
-- `3200` (Tempo)
-- `4317` (OTLP gRPC - Collector)
-- `4318` (OTLP HTTP - Collector)
-- `4319` (OTLP gRPC - Tempo, opcional)
-- `5000` (demo-api)
-- `9090` (Prometheus)
-- `12345` (Alloy)
-- `8889` (Prometheus exporter del Collector)
+1. **SQLSERVER_CONN (Base de Datos):** 
+   Ambos (`demo-api` y `sql-poller`) exigen conectividad a una base de datos `EconetTransacciones` con las tablas `Transferencia` y `TransferenciaInterbancaria` creadas.
+   - *Ejemplo:* `SQLSERVER_CONN=Server=MI_IP;Database=EconetTransacciones;Trusted_Connection=True;TrustServerCertificate=True;`
+
+2. **Keys de Firebase (`FCM Bridge`):**
+   Para que el puente logre despachar alertas al celular, Docker montará la identidad de Google. 
+   - Debes colocar tu llave de cuenta de servicio de Firebase allí: `./observability/certs/firebase-service-account.json`.
+
+3. **Autenticación del Webhook (`BRIDGE_API_KEY`):**
+   Contraseña (Bearer) mediante la cual Grafana podrá interactuar con el FCM Bridge.
 
 ---
 
-## Cómo levantar el entorno
+## Despliegue y Ambientes
 
-### Opción A: Stack completo (incluyendo `sql-poller`)
-> Requiere `SQLSERVER_CONN`
+Antes de iniciar, detén contenedores que usen puertos como `3000` (Grafana), `5000` (DemoAPI), `5001` (FCMBridge), etc.
 
-#### Linux / macOS
+### Opción A: Entorno Local (Desarrollo Rápido)
+Evita MinIO/S3 usando sistema de archivos regular de Docker.
 ```bash
-export SQLSERVER_CONN="Server=...;Database=...;User Id=...;Password=...;TrustServerCertificate=True"
-docker compose up --build
+docker-compose up --build -d
 ```
-### Opción B: Levantar sin sql-poller (si no tienes SQL Server)
+
+### Opción B: Entorno Producción (Arquitectura S3 Storage)
+Exige dependencias extra (combina archivos Compose para lanzar MinIO y habilitar Multi-Tenant logs).
 ```bash
-docker compose up --build otel-collector prometheus loki tempo grafana alloy demo-api
+docker-compose -f docker-compose.yml \
+  -f deploy/prod/docker-compose.prod.yml \
+  -f deploy/prod/docker-compose.minio.yml \
+  -f deploy/prod/docker-compose.loki-s3.yml \
+  -f deploy/prod/docker-compose.tempo-s3.yml \
+  -f deploy/prod/docker-compose.loki-config-prod.yml \
+  up -d
 ```
-## Accesos y puertos
-
-### UIs / APIs
-- **Grafana**: `http://localhost:3000`
-  - usuario: `admin`
-  - contraseña: `admin`
-- **Prometheus**: `http://localhost:9090`
-- **Loki**: `http://localhost:3100`
-- **Tempo**: `http://localhost:3200`
-- **Alloy**: `http://localhost:12345`
-- **Demo API**: `http://localhost:5000`
-
-> Credenciales y configuración actuales son de **demo/local**, no de producción.
 
 ---
 
-## Uso rápido
+## Flujo de Observabilidad y Uso Rápido
 
-### 1) Verificar que la API demo responde
-Abre en tu navegador:
+1. **Operación Transaccional**:
+   Dianas a los nuevos endpoints interactuando con Swagger en `http://localhost:5000/swagger`.
+   O bien, envía un POST a `http://localhost:5000/api/v1/transferencias/internas` (puedes inyectar tu `X-Correlation-Id: mibanco-123`).
+   Verás que el retorno será un **Identity ID** real persistido directamente en SQL Server.
 
-- `http://localhost:5000/health`
-
-Deberías recibir una respuesta JSON con estado del servicio.
-
----
-
-### 2) Ejecutar una transferencia simulada
-
-Haz un `POST` a:
-
-- `http://localhost:5000/api/transactions/transfer`
-
-#### Opción recomendada (sin consola): Postman / Insomnia
-- Método: `POST`
-- URL: `http://localhost:5000/api/transactions/transfer`
-- Body: vacío (si el endpoint no exige payload)
-- Header opcional:
-  - `X-Correlation-Id: prueba-123`
-
-> Si falla de forma aleatoria, no siempre es un bug: la API simula fallos/latencia como parte del escenario demo.
+2. **Correlación de Traza-Logs**:
+   En Grafana (`http://localhost:3000`), usando el "Explorer" (Data sources: Loki & Tempo), filtra por tu Correlation ID. Si encuentras un Log de la Demo Api, verás el enlace al Trace para ver todo el recorrido exacto de tiempo que le tomó hacer el Insert en base de datos.
 
 ---
 
-### 3) Probar correlación (`X-Correlation-Id`)
-Puedes enviar manualmente este header en Postman/Insomnia:
+## Alertas Móviles: Integración con Android y Firebase (FCM)
 
-- **Key:** `X-Correlation-Id`
-- **Value:** `prueba-123`
+**Rol de la aplicación móvil (ObsBank Alerts)**
+La App Android se ha diseñado intencionalmente manteniéndose *absolutamente agnóstica* de Grafana o nuestro stack de Observabilidad. Sus únicas responsabilidades son registrarse en Firebase, obtener su token, y suscribirse explícitamente a los diferentes *topics* de severidad: `obsbank-critical`, `obsbank-warning` y `obsbank-info`. No hace consultas (Pull) al backend; reacciona a los Webhooks (Push).
 
-Luego, en Grafana (Loki), puedes buscar logs relacionados con ese valor para ver la trazabilidad del request.
+**Cómo conectar la plataforma para activar las alertas en la APK:**
 
----
-
-### 4) Revisar telemetría en Grafana
-
-Entra a **Grafana** (`http://localhost:3000`) y revisa:
-
-- **Logs** (Loki): eventos del `demo-api` y de `sample-logs`
-- **Traces** (Tempo): trazas OTEL de la API
-- **Métricas** (Prometheus): métricas de apps y collector
-
-> Si no ves nada al principio, genera tráfico llamando varias veces al endpoint de transferencia.
+1. **Sincronización Firebase:** La app y el Bridge deben estar en el mismo Proyecto Firebase (`google-services.json` compilado en APK, y `firebase-service-account.json` montado en el docker de la BD).
+2. **Setup en Grafana (Contact Point):** 
+   - Dentro de *Alerting*, crea un *Contact Point* Webhook.
+   - Apunta al endpoint interno de la red docker: `http://fcm-bridge:8080/alert`. (Ojo: puerto nativo vs puerto expuesto).
+   - Añade un Custom Header -> `Authorization: Bearer <TU_BRIDGE_API_KEY>`.
+3. **Notification Policies:**
+   - Asigna tu nueva regla para que Grafana dirija alertas por severidad a este nuevo Webhook en vez de solo enviar un Email.
+4. **Validación:**
+   Cuando Grafana detecte anomalías (ej: `sql-poller` advierte de transferencias falladas masivas), derivará a Webhook -> FCM Bridge procesa -> Firebase empuja a la severidad adecuada -> Tu dispositivo emite la notificación push y se guarda en *SharedPreferences*.
 
 ---
 
-## Flujo de observabilidad
-
-### A) `demo-api`
-1. Se llama `POST /api/transactions/transfer`
-2. La API genera logs, trazas y métricas con OpenTelemetry
-3. Envía la telemetría al **OpenTelemetry Collector** (`otel-collector:4317`)
-4. El Collector distribuye:
-   - trazas → **Tempo**
-   - métricas → **Prometheus**
-   - logs → **Loki**
-5. **Grafana** consume esas fuentes y permite correlación
-
----
-
-### B) `sql-poller`
-1. El worker consulta SQL Server periódicamente
-2. Calcula métricas operativas (conteos, pendientes, ratios, antigüedad)
-3. Publica métricas vía OpenTelemetry
-4. El Collector las entrega a Prometheus
-5. Grafana las visualiza
-
----
-
-### C) `sample-logs` + Alloy
-1. Alloy lee logs desde archivos montados
-2. Los envía a Loki con labels
-3. Grafana consulta Loki y los muestra junto a logs de aplicaciones
-
----
-
-## Configuración clave
-
-### Variables de entorno importantes
-
-#### `SQLSERVER_CONN`
-Connection string para `sql-poller`.
-
-Ejemplo de formato:
-```text
-Server=mi-servidor;Database=MiBD;User Id=usuario;Password=clave;TrustServerCertificate=True
-```
-### `demo-api`
-- Corre en modo `Development` dentro del compose
-- Envía telemetría OTLP al Collector (`otel-collector:4317`)
-
----
-
-### `sql-poller`
-- Toma conexión desde `SqlPoller__ConnectionString` (inyectada con `${SQLSERVER_CONN}`)
-- Usa `SqlPoller__IntervalSeconds` para la frecuencia de polling (en compose está en `30`)
-
----
-
-### OpenTelemetry Collector
-- Recibe OTLP por gRPC y HTTP
-- Exporta a:
-  - Tempo (trazas)
-  - Loki (logs)
-  - Prometheus (métricas)
-- También usa exporter `debug` (útil en demo, no en producción)
-
----
-
-### Alloy (logs de archivos)
-- Tiene `tail_from_end = true`
-  - Empieza a leer desde el final del archivo
-  - No reingesta automáticamente todo el histórico previo
-- Añade labels para identificar origen/tipo de log
+## Referencia a la Aplicación Android Móvil
+Puedes revisar de manera independiente toda la arquitectura asociada a la App móvil en Android consultando el documento de arquitectura dedicado: [**Documentación ObsBankAlerts (`app-movil.md`)**](app-movil.md). 
+Para comprender a fondo los errores y sentencias que originan todo el ecosistema de alertas de Grafana, recuerda leer la [**Guía de Errores Operativos (`mensajes_de_errores.md`)**](mensajes_de_errores.md) y documentación de [**Métricas SQL (`queries.md`)**](queries.md) para un entendimiento total y absoluto.
 
 ---
 
 ## Troubleshooting
 
-### `sql-poller` no levanta
-**Causas probables:**
-- Falta `SQLSERVER_CONN`
-- Connection string inválida
-- SQL Server inaccesible
-- Tablas esperadas no existen o no hay permisos
-
-**Cómo revisarlo (sin consola):**
-- Abre Docker Desktop
-- Ve al contenedor `sql-poller`
-- Revisa logs de inicio
-
-**Qué deberías confirmar antes de culpar al código:**
-- ¿La BD y tablas realmente existen?
-- ¿El usuario tiene permisos de lectura?
-- ¿La red permite conexión desde Docker?
+- **Crash del `sql-poller` o `demo-api` al Iniciar:** 
+  Verifica que tu host y puerto desde `SQLSERVER_CONN` admiten acceso desde un entorno de contenedores, a menudo requiere usar `host.docker.internal` en lugar de `localhost`.
+- **Bridge Error (Token Invalid):**
+  Asegúrate que la `BRIDGE_API_KEY` coincida milimétricamente entre tu `.env` de docker y lo que digitaste en el *Contact Point* de Grafana y que el archivo `.json` de Google esté debidamente inyectado en `/observability/certs/`.
+- **Pérdida de S3 / Buckets no Encontrados:**
+  Ocasionalmente la inicialización asíncrona tipo *job* (minio-init) puede retardarse frente a Loki. Un reinicio usual del stack solucionará la disponibilidad asíncrona de AWS CLI creando los buckets.
 
 ---
 
-### No aparecen métricas en Prometheus/Grafana
-**Qué revisar:**
-- `demo-api` y/o `sql-poller` están activos
-- `otel-collector` está corriendo
-- Prometheus está levantado
-- Hay tráfico generado (si no llamas la API, habrá poca señal)
+## Seguridad y Recomendaciones de Producción
 
-**Revisión visual recomendada:**
-1. Grafana → Explore → Prometheus
-2. Busca métricas relacionadas con OTEL / runtime / servicio
-3. Si no hay datos, revisa logs del Collector en Docker Desktop
-
-> Error común: asumir que Prometheus scrapea directo a `demo-api`. En este stack, scrapea al **Collector**.
-
----
-
-### No aparecen logs de `sample-logs` en Loki
-**Qué revisar:**
-- Que la carpeta `sample-logs/` tenga archivos
-- Que Alloy esté corriendo
-- Que las rutas coincidan con las definidas en la config
-- Que entiendas el efecto de `tail_from_end = true`
-
-**Señal de diagnóstico útil:**
-- En Grafana → Explore → Loki, intenta listar labels y filtrar por `source=alloy-file`
-
----
-
-### Grafana abre pero no ves dashboards
-Eso es esperable en el estado actual del repo.
-
-**Razón:** el repo provisiona **datasources**, pero no dashboards listos para usar.
-
----
-
-## Mejoras sugeridas
-
-### Prioridad alta
-- [ ] Agregar dashboards versionados (JSON) y provisioning real
-- [ ] Agregar healthchecks en `docker-compose.yml`
-- [ ] Documentar nombres exactos de métricas exportadas
-- [ ] Parsing real de JSON en Alloy (stages/pipeline), no solo labels
-- [ ] Alertas básicas (Prometheus/Grafana Alerting) para fallos del `sql-poller`
-
-### Prioridad media
-- [ ] Separar configuraciones por ambiente (`dev`, `demo`, `prod`)
-- [ ] Reintentos/backoff más robustos en `sql-poller`
-- [ ] Limpiar artefactos de plantilla (`weatherforecast`)
-- [ ] Tests de integración para `demo-api` y consultas SQL
-
-### Prioridad baja
-- [ ] Ajustar `sql-poller` a SDK de Worker (más coherente semánticamente)
-- [ ] Añadir ejemplos de consultas de Loki / PromQL / TraceQL
-- [ ] Añadir scripts/generador de tráfico para la API demo
-
----
-
-## Seguridad (importante)
-
-Este stack está orientado a **entornos locales de prueba**. No lo despliegues en producción tal como está sin:
-
-- credenciales seguras
-- autenticación/autorización
-- TLS
-- endurecimiento de contenedores
-- gestión de secretos
-- límites de recursos
-- retención/almacenamiento adecuados
-
----
-
-## Notas finales
-
-La arquitectura base está bien encaminada para observabilidad (Collector + Prometheus/Loki/Tempo + Grafana), pero todavía le faltan piezas operativas clave:
-
-- dashboards
-- alertas
-- healthchecks
-- documentación de métricas
-- hardening
-
-Conclusión directa: **es un laboratorio funcional**, no una solución terminada.
----
+Para elevar este stack al estricto estándar productivo real y evitar incidencias graves, aplica los siguientes parches de infraestructura detectados en auditoría técnica:
+1. **Protección *OOM*:** Grafana, LTS Prometheus y Alloy pueden devorar la memoria del Host Node afectando servicios de base de datos colindantes. Aplica rigurosos Deploy Limits en tu Compose.
+2. **Retención nativa de Docker:** Configura el log driver predeterminado del Daemon docker con `max-size: 50m` y `max-file: 3` para prevenir un disk flush out.
+3. **Migración a Bóvedas K/V Activas:** Evita los archivos `.env` planos y transita tu modelo de contraseñas de Grafana y Firebase JSON hacia el inyector de *Docker Secrets*, AWS Secrets Manager, o Hashicorp Vault para protección frente a fugas de código fuente.

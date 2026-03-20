@@ -1,0 +1,57 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: s3
+      schema: v13
+      index:
+        prefix: loki_index_
+        period: 24h
+
+storage_config:
+  aws:
+    s3: ${LOKI_S3_ENDPOINT}
+    bucketnames: ${LOKI_S3_BUCKET}
+    access_key_id: ${LOKI_S3_ACCESS_KEY}
+    secret_access_key: ${LOKI_S3_SECRET_KEY}
+    s3forcepathstyle: true
+    region: ${LOKI_S3_REGION}
+
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-index
+    cache_location: /loki/tsdb-cache
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: s3
+
+limits_config:
+  retention_period: 2160h
+  reject_old_samples: true
+  reject_old_samples_max_age: 2160h
+
+chunk_store_config:
+  max_look_back_period: 2160h
+
+querier:
+  max_concurrent: 8
+
+query_range:
+  align_queries_with_step: true
+
+# Desactivar ruler por ahora (porque no tienes Alertmanager definido)
+ruler:
+  enable_api: false

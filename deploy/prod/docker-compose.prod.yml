@@ -1,0 +1,57 @@
+services:
+  otel-collector:
+    ports: []
+    restart: unless-stopped
+
+  prometheus:
+    ports: []
+    restart: unless-stopped
+    volumes:
+      - prom_data_prod:/prometheus
+
+  loki:
+    ports: []
+    restart: unless-stopped
+    volumes:
+      - loki_data_prod:/loki
+
+  tempo:
+    ports: []
+    restart: unless-stopped
+    volumes:
+      - tempo_data_prod:/var/tempo
+
+  grafana:
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    env_file:
+      - ./deploy/prod/.env
+
+  alloy:
+    ports: []
+    restart: unless-stopped
+    volumes:
+      - alloy_data_prod:/var/lib/alloy/data
+
+  demo-api:
+    ports: []
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
+  sql-poller:
+    restart: unless-stopped
+
+  redis:
+    ports: []
+    restart: unless-stopped
+    volumes:
+      - redis_data_prod:/data
+
+volumes:
+  prom_data_prod:
+  loki_data_prod:
+  tempo_data_prod:
+  alloy_data_prod:
+  redis_data_prod:

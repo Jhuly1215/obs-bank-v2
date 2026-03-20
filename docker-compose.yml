@@ -65,7 +65,7 @@ services:
       GF_SMTP_SKIP_VERIFY: "false"
       GF_SMTP_STARTTLS_POLICY: "MandatoryStartTLS"
     volumes:
-      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/data:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       #LDAP
       - ./observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
@@ -110,6 +110,7 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:8080
       ASPNETCORE_ENVIRONMENT: Development
+      SQLSERVER_CONN: ${SQLSERVER_CONN}
       OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
       OpenTelemetry__ServiceName: bank-obs-demo-api
       OpenTelemetry__ServiceVersion: 2.0.0
@@ -173,6 +174,5 @@ volumes:
   prom_data:
   loki_data:
   tempo_data:
-  grafana_data:
   alloy_data:
   redis_data:

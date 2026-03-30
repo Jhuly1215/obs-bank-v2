@@ -1,0 +1,284 @@
+apiVersion: 1
+groups:
+    - orgId: 1
+      name: Alertas Bridge
+      folder: Alertas Bridge
+      interval: 10s
+      rules:
+        - uid: bfgm7trypct8gd
+          title: 'Alerta Crítica: Fallo Interbancario (5-9)'
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: PBFA97CFB590B2093
+              model:
+                editorMode: code
+                expr: bank_inter_error_24h_total_tx{service_name="bank-sql-poller"}
+                instant: false
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: true
+                refId: A
+            - refId: B
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                type: reduce
+            - refId: C
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: B
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          for: 1m
+          annotations:
+            description: 'Alerta: El poller SQL ha detectado transferencias interbancarias atoradas en estado 5 o 9. Valor actual: {{ $values.C.Value }} errores.'
+            summary: '[Fallo Interbancario Detectado]'
+          labels:
+            severity: critical
+          isPaused: false
+          notification_settings:
+            receiver: FCM-BRIDGE
+        - uid: dfgmao0vx9reof
+          title: 'Alerta Advertencia: Fallo Intrabancario (5-9)'
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: PBFA97CFB590B2093
+              model:
+                editorMode: code
+                expr: bank_intra_error_24h_total_tx{service_name="bank-sql-poller"}
+                instant: false
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: true
+                refId: A
+            - refId: B
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                type: reduce
+            - refId: C
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: B
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: NoData
+          execErrState: Error
+          for: 1m
+          annotations:
+            description: El poller SQL reporta {{ $values.C.Value }} transferencias internas (intra) atascadas (con error) en la base de datos.
+            summary: '[Alerta Interna] Fallas Detectadas'
+          labels:
+            severity: warning
+          isPaused: false
+          notification_settings:
+            receiver: FCM-BRIDGE
+    - orgId: 1
+      name: Gestión de Errores
+      folder: Alertas Operativas
+      interval: 1m
+      rules:
+        - uid: high_error_rate_01
+          title: Tasa de error elevada
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 300
+                to: 0
+              datasourceUid: prometheus
+              model:
+                expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.1
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: A
+            - refId: C
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0.1
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - A
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          dashboardUid: ""
+          panelId: 0
+          noDataState: NoData
+          execErrState: Error
+          for: 5m
+          annotations:
+            description: La plataforma detectó que el porcentaje de transacciones fallidas supera el umbral definido para monitoreo (>10% en 5 min).
+            summary: Tasa de error elevada en transacciones (HTTP 5xx)
+          labels:
+            severity: critical
+            team: operaciones
+          isPaused: false
+        - uid: no_logs_data_02
+          title: No se visualizan logs o trazas en Grafana
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: prometheus
+              model:
+                expr: absent(rate(otelcol_receiver_accepted_log_records[5m])) or up{job="loki"} == 0
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: A
+            - refId: C
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - A
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          dashboardUid: ""
+          panelId: 0
+          noDataState: Alerting
+          execErrState: Error
+          for: 5m
+          annotations:
+            description: No se obtienen resultados al consultar Loki o Tempo. El colector OpenTelemetry o Loki cayeron.
+            summary: Ausencia de logs/trazas en la plataforma
+          labels:
+            severity: warning
+            team: infraestructura
+          isPaused: false

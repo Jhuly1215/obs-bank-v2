@@ -27,12 +27,17 @@ services:
     restart: unless-stopped
     env_file:
       - ./deploy/prod/.env
+    volumes:
+      # Sobrescribimos el archivo local mock con la configuracion real de AD
+      - ./deploy/prod/ldap.prod.toml:/etc/grafana/ldap.toml:ro
 
   alloy:
     ports: []
     restart: unless-stopped
     volumes:
       - alloy_data_prod:/var/lib/alloy/data
+      # Sobrescribe la ruta de los logs locales por la ruta de Producción real definida en .env
+      - ${PROD_LOGS_PATH:-/var/log/banco}:/var/log/bank-apis:ro
 
   demo-api:
     ports: []
@@ -48,6 +53,11 @@ services:
     restart: unless-stopped
     volumes:
       - redis_data_prod:/data
+
+  # Desactivamos el mock server de LDAP en Producción
+  openldap:
+    profiles:
+      - disable
 
 volumes:
   prom_data_prod:

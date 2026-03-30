@@ -1,83 +1,86 @@
 # Consultas y Métricas de Observabilidad (sql-poller)
 
-El servicio `Bank.Obs.SqlPoller` ejecuta un ciclo (*polling*) continuo sobre la base de datos de Transacciones para recolectar indicadores operativos (Volumen, Pendientes y Errores). 
+El servicio `Bank.Obs.SqlPoller` ejecuta un ciclo (*polling*) continuo cada minuto sobre la base de datos de Transacciones de Ecofuturo para recolectar indicadores operativos críticos (Volumen, Pendientes y Errores Técnicos).
 
-A continuación, se detalla **qué hace cada consulta SQL** (`SqlQueries.cs`) y **a qué métrica de OpenTelemetry** (`SqlMetrics.cs`) alimenta.
+Toda la instrumentación se realiza nativamente con la librería de **OpenTelemetry en .NET 9**. Las métricas son capturadas por el colector y expuestas a Prometheus.
 
----
-
-## 1. Volumen Transaccional (Conteos)
-
-Se mide la cantidad neta de operaciones que llegaron al sistema, tanto en la tabla interna (`Transferencia`) como interbancaria (`TransferenciaInterbancaria`).
-
-| Consulta (Query) | Ventana (Tiempo) | Descripción Exacta | Nombre de Métrica OTel |
-|------------------|------------------|---------------------|------------------------|
-| `IntraTxLast15m` | Últimos 15 min | Cantidad de `Transferencia` creadas en los últimos 15 min. | `bank.transfer.intra.last15m` |
-| `InterTxLast15m` | Últimos 15 min | Cantidad de `TransferenciaInterbancaria` creadas en los últimos 15 min. | `bank.transfer.inter.last15m` |
-| `IntraTxLast24h` | Últimas 24 horas | Cantidad total de transferencias internas (`Transferencia`) recibidas durante las últimas 24 hrs. | `bank.transfer.intra.last24h` |
-| `InterTxLast24h` | Últimas 24 horas | Cantidad total de transferencias interbancarias recibidas durante las últimas 24 hrs. | `bank.transfer.inter.last24h` |
-| `IntraTxLast30d` | Últimos 30 días | Rendimiento de volumen mensual (interno). | `bank.transfer.intra.last30d` |
-| `InterTxLast30d` | Últimos 30 días | Rendimiento de volumen mensual (interbancario). | `bank.transfer.inter.last30d` |
-
-*(Nota: Estas métricas son del tipo `ObservableGauge`. Grafana las recibe como el conteo bruto que había en caja negra en el momento del scrape).*
+Debido a que OpenTelemetry agrega la **unidad de medida** (`tx`, `ratio`, `min`) al final del nombre de la métrica de forma automática al exportarla hacia Prometheus, la siguiente tabla mapea con precisión la variable de estado C#, la métrica definida y el resultado final a consultar en Grafana.
 
 ---
 
-## 2. Backlog y Pendientes
+## 1. Volumen Transaccional (Conteos Activos)
 
-Registra operaciones que se encuentran "atrapadas" en un estado intermedio (estados `1` a `8`). Según la lógica de negocio, **el estado 9 representa un Error técnico/rechazo, por lo que NO se contabiliza como pendiente, sino como error**.
+Se mide la cantidad neta de operaciones que llegaron al sistema (`Transferencia` para internas, y `TransferenciaInterbancaria` para externas).
 
-| Consulta (Query) | Ventana | Descripción Exacta | Nombre de Métrica OTel |
-|------------------|----------|---------------------|------------------------|
-| `IntraPendingCount24h` | Últimas 24h | Cuenta interna de transferencias cuyo *EstadoId* sea entre 1 y 8. | `bank.transfer.intra.pending_24h` |
-| `InterPendingCount24h` | Últimas 24h | Cuenta interbancaria de transferencias con *EstadoId* entre 1 y 8. | `bank.transfer.inter.pending_24h` |
-| `IntraPendingLast7d` | Últimos 7 días| Acumulado de internas que no hayan resuelto en toda la semana. | `bank.transfer.intra.pending_7d` |
-| `InterPendingLast7d` | Últimos 7 días| Acumulado de interbancarias sin concretar en la semana. | `bank.transfer.inter.pending_7d` |
-
-### Envejecimiento de Pendientes (Max Age)
-El poller también mide **cuántos minutos lleva trabada** la transacción pendiente más antigua. Esto lanza alarmas de SLA (Service Level Agreement).
-- `IntraPendingMaxAgeMin`: `bank.transfer.intra.pending_maxage_min`
-- `InterPendingMaxAgeMin`: `bank.transfer.inter.pending_maxage_min`
-
-*(Técnicamente hace un `DATEDIFF(MINUTE, MIN(FechaCreacion), GETDATE())` de las transacciones en estado 1-8).*
+| Consulta SQL / C# | Ventana | Descripción | Nombre OTel (.NET) | Nombre Final PromQL (Grafana) |
+|-------------------|---------|-------------|-------------------|-------------------------------|
+| `IntraTxLast15m` | Últimos 15 min | Operaciones internas recibidas. | `bank_intra_tx_15m_total` | `bank_intra_tx_15m_total_tx` |
+| `InterTxLast15m` | Últimos 15 min | Operaciones interbancarias recibidas. | `bank_inter_tx_15m_total` | `bank_inter_tx_15m_total_tx` |
+| `IntraTxLast24h` | Últimas 24h | Total bruto transferencias internas (1 día). | `bank_intra_tx_24h_total` | `bank_intra_tx_24h_total_tx` |
+| `InterTxLast24h` | Últimas 24h | Total bruto transferencias interbancarias (1 día).| `bank_inter_tx_24h_total` | `bank_inter_tx_24h_total_tx` |
+| `IntraTxLast30d` | Últimos 30d | Rendimiento de volumen mensual (interno). | `bank_intra_tx_30d_total` | `bank_intra_tx_30d_total_tx` |
+| `InterTxLast30d` | Últimos 30d | Rendimiento de volumen mensual (interbancario). | `bank_inter_tx_30d_total` | `bank_inter_tx_30d_total_tx` |
 
 ---
 
-## 3. Calidad y Ratio de Errores (Fail Rates)
+## 2. Backlog y Transacciones Pendientes (Atascadas)
 
-Mide la porción probabilística (ratio) de las operaciones que terminan en un fallo técnico (Estado `9`). 
+Monitoriza operaciones atrapadas en estados intermedios del core bancario (estados 1 al 8 de la máquina de estados local).
+**NOTA:** El Estado 9 significa "Finalizado con Error / Rechazado", no es un pendiente.
 
-| Consulta / Métrica OTel | Descripción de la Consulta SQL |
-|--------------------------|---------------------------------|
-| `bank.transfer.intra.fail_rate_24h` (`IntraFailTechRate24h`) | Calcula `(Totales_con_Estado9 * 100.0) / Totales_General` en las últimas 24 hrs (Internas). |
-| `bank.transfer.inter.fail_rate_24h` (`InterFailTechRate24h`) | Calcula la misma tasa de fallos, pero de Interbancarias en 24h. |
-| `bank.transfer.intra.fail_rate_30d` / `.inter.fail_rate_30d` | El mismo ratio matemático de calidad pero proyectado sobre la ventana de 30 días. |
+| Consulta SQL / C# | Ventana | Descripción | Nombre Final PromQL (Grafana) |
+|-------------------|---------|-------------|-------------------------------|
+| `IntraPendingCount24h` | Últimas 24h | Internas sin liquidar (Estado 1-8). | `bank_intra_pending_24h_total_tx` |
+| `InterPendingCount24h` | Últimas 24h | Interbancarias sin liquidar ACH (Estado 1-8). | `bank_inter_pending_24h_total_tx` |
+| `IntraPendingLast7d` | Últimos 7d | Acumulado semanal de internas sin resolver. | `bank_intra_pending_7d_total_tx` |
+| `InterPendingLast7d` | Últimos 7d | Acumulado semanal de interbancarias sin concretar. | `bank_inter_pending_7d_total_tx` |
 
-### Share (Distribución de Errores)
-Para las interbancarias, se incluye un Ratio particular (`InterErrorState9Share24h` / `bank.transfer.inter.state9_share_24h`) que evalúa **qué porcentaje** representa el estado 9 sobre TODOS los estados que son considerados "estados finales / observados recurrentemente" en un día de fallo masivo.
+### Envejecimiento del Backlog (SLA Violation)
+Mide **cuántos minutos** lleva atascada la transacción más antigua dentro del bloque de pendientes de la última semana.
 
----
-
-## 4. Conteo de Errores y Aging (Errores en el tiempo)
-
-Cantidad absoluta de errores (Estado = 9) y qué tan viejos son.
-
-- **Conteo Puro (24h):**
-  - Internas (`IntraErrorCount24h` / `bank.transfer.intra.error_count_24h`).
-  - Interbancarias (`InterErrorCount24h` / `bank.transfer.inter.error_count_24h`).
-
-- **Antigüedad Máxima del Error Prominente (7 días):**
-  - Mide para determinar *hace cuánto tiempo explotó* la transacción truncada más vieja de la semana.
-  - OTel: `bank.transfer.intra.error_maxage_min_7d` / `bank.transfer.inter.error_maxage_min_7d`.
+- `IntraPendingMaxAgeMin`: `bank_intra_pending_max_age_min_7d_min`
+- `InterPendingMaxAgeMin`: `bank_inter_pending_max_age_min_7d_min`
 
 ---
 
-## 5. Métricas del Propio Poller (Salud del Worker)
+## 3. Degradación, Tasa de Fallos (Calidad de Servicio)
 
-El proceso mismo expone dos métricas adicionales para auditar si el ciclo de ejecución está funcionando correctamente:
+Calcula matemáticamente qué porción del volumen total del banco se transforma en un fallo fatal (Estado 9).
 
-1. `bank.sqlpoller.poll_duration_sec`: *Histograma* que registra cuántos segundos tarda el batch entero de las consultas a SQL en terminar de forma exitosa.
-2. `bank.sqlpoller.poll_errors_total`: *Counter* que sube +1 cada vez que un ciclo de polling entero revienta (ej: por pérdida de conexión TCP con SQL Server).
+| Ratio C# | Descripción | Nombre Final PromQL (Grafana) |
+|----------|-------------|-------------------------------|
+| `IntraFailTechRate24h` | % de fallos en transferencias Internas (últimas 24 horas). | `bank_intra_fail_tech_rate_24h_ratio` |
+| `InterFailTechRate24h` | % de fallos en transferencias Interbancarias (últimas 24 horas). | `bank_inter_fail_tech_rate_24h_ratio` |
+| `IntraFailTechRate30d` | Proyección de fallos interna a nivel mensual (SLA mensual). | `bank_intra_fail_tech_rate_30d_ratio` |
+| `InterFailTechRate30d` | Proyección de fallos interbancaria a nivel mensual. | `bank_inter_fail_tech_rate_30d_ratio` |
+
+### Error Share Distribution
+Evalúa **qué proporción** de los estados finales en las interbancarias terminaron específicamente en error 9 (frente a los exitosos):
+- `InterErrorState9Share24h` => `bank_inter_error_state9_share_24h_ratio`
+- `InterErrorState9Share30d` => `bank_inter_error_state9_share_30d_ratio`
 
 ---
-*Documentación generada técnica acorde a la versión v2 del Observability Stack.*
+
+## 4. Cuantificación de Errores Absolutos y su Edad
+
+Cantidades netas inyectables en paneles de Alertas Críticas (como las enviadas al celular Android FCM Bridge).
+
+| Métrica Absoluta C# | Métrica Originaria | Nombre Final PromQL (Grafana) |
+|---------------------|--------------------|-------------------------------|
+| `IntraErrorCount24h` | Conteo de Fallos Internos | `bank_intra_error_24h_total_tx` |
+| `InterErrorCount24h` | Conteo de Fallos Externos | `bank_inter_error_24h_total_tx` |
+| `IntraErrorMaxAgeMin7d` | Edad del error interno más viejo | `bank_intra_error_max_age_min_7d_min` |
+| `InterErrorMaxAgeMin7d` | Edad del error externo más viejo | `bank_inter_error_max_age_min_7d_min` |
+
+*(Se utilizan activamente en las Alertas de Nivel Critical / Warning del sistema)*.
+
+---
+
+## 5. Métricas Operativas de Telemetría Interna (Health Poller)
+
+Verificadores propios para confirmar la salud de las conexiones a la base de datos principal y ciclo de scraping:
+
+1. `bank_sql_poller_last_poll_unixtime_s`: (Gauge) Timestamp exacto del último ciclo.
+2. `bank_sql_poller_last_success_unixtime_s`: (Gauge) Timestamp exacto del último ciclo que no experimentó excepciones.
+3. `bank.sqlpoller.poll_duration_sec`: (Histograma) Segundos demorados en ejecutar todo el batch `SqlQueries.*`.
+4. `bank.sqlpoller.poll_errors_total`: (Counter) Sube +1 cuando el thread central estalla o corta la conexión con SQL.

@@ -4,11 +4,11 @@ logging {
 
 local.file_match "bank_logs" {
   path_targets = [
-    { "__path__" = "/var/log/bank-apis/InterbancariaAsyncAPI/*.log", app = "InterbancariaAsyncAPI", format = "text" },
-    { "__path__" = "/var/log/bank-apis/TransaccionInternaApi/*.log",  app = "TransaccionInternaApi",  format = "text" },
+    { "__path__" = "/var/log/bank-apis/InterbancariaAsyncAPI/*.log", service_name = "InterbancariaAsyncAPI", format = "text" },
+    { "__path__" = "/var/log/bank-apis/TransaccionInternaApi/*.log",  service_name = "TransaccionInternaApi",  format = "text" },
 
-    { "__path__" = "/var/log/bank-apis/logsEconetTransacciones/*.json",                 app = "logsEconetTransacciones",                 format = "json" },
-    { "__path__" = "/var/log/bank-apis/logsEconetTransaccionesInterbancarias/*.json",   app = "logsEconetTransaccionesInterbancarias",   format = "json" },
+    { "__path__" = "/var/log/bank-apis/logsEconetTransacciones/*.json",                 service_name = "logsEconetTransacciones",                 format = "json" },
+    { "__path__" = "/var/log/bank-apis/logsEconetTransaccionesInterbancarias/*.json",   service_name = "logsEconetTransaccionesInterbancarias",   format = "json" },
   ]
 }
 

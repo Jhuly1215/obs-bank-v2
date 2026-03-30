@@ -64,6 +64,11 @@ services:
       GF_SMTP_FROM_NAME: "${GF_SMTP_FROM_NAME}"
       GF_SMTP_SKIP_VERIFY: "false"
       GF_SMTP_STARTTLS_POLICY: "MandatoryStartTLS"
+
+      # === LDAP AUTHENTICATION ===
+      GF_AUTH_LDAP_ENABLED: "true"
+      GF_AUTH_LDAP_CONFIG_FILE: "/etc/grafana/ldap.toml"
+      GF_AUTH_LDAP_ALLOW_SIGN_UP: "true"
     volumes:
       - ./observability/grafana/data:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -165,6 +170,18 @@ services:
       - ./observability/certs/firebase-service-account.json:/etc/secrets/firebase-service-account.json:ro
     networks: [ obs ]
     restart: unless-stopped
+
+  # =========================
+  # MOCK LDAP OPENLDAP SERVER
+  # =========================
+  openldap:
+    image: rroemhild/test-openldap
+    container_name: obs-bank-v2-ldap-1
+    ports:
+      - "389:389"
+    environment:
+      - LDAP_DOMAIN=planetexpress.com
+    networks: [ obs ]
 
 networks:
   obs:

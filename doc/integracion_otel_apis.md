@@ -1,4 +1,4 @@
-# Guía de Integración OpenTelemetry (OTLP) en APIs Producción
+# Guía de Integración OpenTelemetry (OTLP) en APIs Producción-v2
 
 Este documento detalla el procedimiento estándar y considerado "Clean Architecture" para integrar APIs .NET de Producción (como la API de EconetTransacciones) al stack de Observabilidad (`obs-bank-v2`).
 

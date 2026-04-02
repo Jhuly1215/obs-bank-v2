@@ -1,0 +1,246 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    },
+    {
+      "name": "DS_LOKI",
+      "label": "Loki",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "11.1.4" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
+    { "type": "panel", "id": "logs", "name": "Logs", "version": "" },
+    { "type": "panel", "id": "alertlist", "name": "Alert list", "version": "" }
+  ],
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "panels": [],
+      "title": "FILA 1 — TARJETAS EJECUTIVAS GENERALES",
+      "type": "row"
+    },
+    {
+      "gridPos": { "h": 5, "w": 3, "x": 0, "y": 1 },
+      "id": 101,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [{ "expr": "sum(tx_created_total_24h)", "refId": "A" }],
+      "title": "Total TX (24h)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } } }
+    },
+    {
+      "gridPos": { "h": 5, "w": 3, "x": 3, "y": 1 },
+      "id": 102,
+      "options": {
+        "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [{ "expr": "sum(tx_created_total_24h{source=\"intra\"})", "refId": "A" }],
+      "title": "Internas (24h)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } }
+    },
+    {
+      "gridPos": { "h": 5, "w": 3, "x": 6, "y": 1 },
+      "id": 103,
+      "options": {
+        "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [{ "expr": "sum(tx_created_total_24h{source=\"inter\"})", "refId": "A" }],
+      "title": "Interbancarias (24h)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] } } }
+    },
+    {
+      "gridPos": { "h": 5, "w": 3, "x": 9, "y": 1 },
+      "id": 104,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "sum(tx_pending_count_24h)", "refId": "A" }],
+      "title": "Pendientes (24h)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 130 }, { "color": "orange", "value": 260 }, { "color": "red", "value": 390 }] } } }
+    },
+    {
+      "gridPos": { "h": 5, "w": 3, "x": 12, "y": 1 },
+      "id": 105,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "sum(tx_pending_count_24h) / sum(tx_created_total_24h)", "refId": "A" }],
+      "title": "Pending Ratio (24h)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "percentunit", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 0.01 }, { "color": "orange", "value": 0.02 }, { "color": "red", "value": 0.03 }] } } }
+    },
+    {
+      "gridPos": { "h": 5, "w": 3, "x": 15, "y": 1 },
+      "id": 106,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "sum(tx_error_count_24h) / sum(tx_created_total_24h)", "refId": "A" }],
+      "title": "Error Rate (24h)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "percentunit", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 0.01 }, { "color": "orange", "value": 0.02 }, { "color": "red", "value": 0.03 }] } } }
+    },
+    {
+      "gridPos": { "h": 5, "w": 3, "x": 18, "y": 1 },
+      "id": 107,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "max(tx_pending_oldest_seconds)", "refId": "A" }],
+      "title": "Antigüedad Máx (s)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 60 }, { "color": "orange", "value": 120 }, { "color": "red", "value": 300 }] } } }
+    },
+    {
+      "gridPos": { "h": 5, "w": 3, "x": 21, "y": 1 },
+      "id": 108,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "time() - max(sql_poller_last_success_timestamp)", "refId": "A" }],
+      "title": "Poller Staleness",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 120 }, { "color": "red", "value": 300 }] } } }
+    },
+
+    {
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }, "id": 200, "panels": [], "title": "FILA 2 — CONTEXTO Y COMPARATIVOS", "type": "row"
+    },
+    {
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 7 },
+      "id": 201,
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "((sum(tx_created_total_24h) - avg_over_time(sum(tx_created_total_24h)[7d:1h])) / avg_over_time(sum(tx_created_total_24h)[7d:1h])) * 100", "refId": "A" }],
+      "title": "Variación Total vs Baseline (7d)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "percent", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": -30 }, { "color": "green", "value": -15 }, { "color": "orange", "value": 15 }, { "color": "red", "value": 30 }] } } }
+    },
+    {
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 7 },
+      "id": 202,
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "((sum(tx_created_total_24h) - avg_over_time(sum(tx_created_total_24h)[14d:1h])) / avg_over_time(sum(tx_created_total_24h)[14d:1h])) * 100", "refId": "A" }],
+      "title": "Variación Total vs Baseline (14d)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "percent", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": -30 }, { "color": "green", "value": -15 }, { "color": "orange", "value": 15 }, { "color": "red", "value": 30 }] } } }
+    },
+    {
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 7 },
+      "id": 203,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "sum(tx_resolved_count_24h) / sum(tx_created_total_24h)", "refId": "A" }],
+      "title": "Processing Ratio (24h)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "percentunit", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.80 }, { "color": "green", "value": 0.95 }] } } }
+    },
+    {
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 7 },
+      "id": 204,
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "sum(tx_pending_count_7d) / sum(tx_created_total_7d)", "refId": "A" }],
+      "title": "Pending Ratio Expandido (7d)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "percentunit", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.02 }, { "color": "red", "value": 0.05 }] } } }
+    },
+    {
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 7 },
+      "id": 205,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "max(sql_poller_cycle_duration_seconds)", "refId": "A" }],
+      "title": "Cycle Duration (Poller)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 5 }, { "color": "red", "value": 10 }] } } }
+    },
+
+    {
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 11 }, "id": 300, "panels": [], "title": "FILA 3 — SERIES TEMPORALES", "type": "row"
+    },
+    {
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "id": 301,
+      "options": { "tooltip": { "mode": "single", "sort": "none" } },
+      "targets": [
+        { "expr": "sum by(source) (tx_created_total_24h)", "legendFormat": "Volumen - {{source}}", "refId": "A" },
+        { "expr": "sum by(source) (tx_resolved_count_24h)", "legendFormat": "Volumen - {{source}}", "refId": "B" }
+      ],
+      "title": "Dinámica de Volumen Creado vs Resuelto (Últimas 24h)",
+      "type": "timeseries",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 } } }
+    },
+    {
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 12 },
+      "id": 302,
+      "options": { "tooltip": { "mode": "single", "sort": "none" } },
+      "targets": [{ "expr": "sum by(source) (tx_pending_count_24h)", "legendFormat": "Pendientes - {{source}}", "refId": "A" }],
+      "title": "Acumulación de Pendientes",
+      "type": "timeseries",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "fillOpacity": 15, "lineWidth": 1 } } }
+    },
+    {
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 12 },
+      "id": 303,
+      "options": { "tooltip": { "mode": "single", "sort": "none" } },
+      "targets": [{ "expr": "sum by(source) (tx_error_count_24h)", "legendFormat": "Errores - {{source}}", "refId": "A" }],
+      "title": "Desviación de Errores Críticos",
+      "type": "timeseries",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "bars", "fillOpacity": 80, "lineWidth": 1 } } }
+    },
+
+    {
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 }, "id": 400, "panels": [], "title": "FILA 4 — EXPLORACIÓN TÉCNICA / OPERATIVA", "type": "row"
+    },
+    {
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
+      "id": 401,
+      "options": { "showLabels": false, "showTime": true, "wrapLogMessage": true },
+      "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "expr": "{service_name=\"bank-sql-poller\"} |= \"Exception\"", "refId": "A" }],
+      "title": "Errores del SQL Poller (Loki)",
+      "type": "logs"
+    },
+    {
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
+      "id": 402,
+      "options": { "showLabels": false, "showTime": true, "wrapLogMessage": true },
+      "targets": [{ "datasource": { "type": "loki", "uid": "loki" }, "expr": "{service_name=~\"fcm-bridge|demo-api\"} |= \"error\"", "refId": "A" }],
+      "title": "Fallos de FCM Bridge y Gateway (Loki)",
+      "type": "logs"
+    },
+
+    {
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 }, "id": 500, "panels": [], "title": "FILA 5 — ALERTAMIENTO Y CANALES", "type": "row"
+    },
+    {
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 29 },
+      "id": 501,
+      "options": { "maxItems": 10, "showInstances": true, "showTime": true, "sortOrder": 1, "stateFilter": { "firing": true, "normal": false, "pending": true } },
+      "title": "Alertas Activas - Unified Alerting",
+      "type": "alertlist"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "EconetTransacciones - Monitoreo Avanzado OTel",
+  "uid": "dash_econet_advanced"
+}

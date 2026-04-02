@@ -2,100 +2,220 @@ apiVersion: 1
 
 groups:
   - orgId: 1
-    name: "Gestión de Errores"
-    folder: "Alertas Operativas"
+    name: "ObsBank - Alta Prioridad"
+    folder: "Alertas Críticas"
     interval: 1m
     rules:
-      - uid: "high_error_rate_01"
-        title: "Tasa de error elevada"
-        condition: "C"
-        data:
-          - refId: "A"
-            relativeTimeRange:
-              from: 300
-              to: 0
-            datasourceUid: "prometheus"
-            model:
-              expr: "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) > 0.1"
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: "A"
-          - refId: "C"
-            datasourceUid: "__expr__"
-            model:
-              conditions:
-                - evaluator:
-                    params: [0.1]
-                    type: "gt"
-                  operator:
-                    type: "and"
-                  query:
-                    params: ["A"]
-                  reducer:
-                    params: []
-                    type: "last"
-                  type: "query"
-              datasource:
-                type: "__expr__"
-                uid: "__expr__"
-              expression: "A"
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: "C"
-              type: "threshold"
+      - uid: "alert_staleness_01"
+        title: "Poller Dead (Staleness > 5m)"
+        condition: A
+        for: 5m
         noDataState: NoData
         execErrState: Error
-        for: 5m
-        annotations:
-          description: "La plataforma detectó que el porcentaje de transacciones fallidas supera el umbral definido para monitoreo (>10% en 5 min)."
-          summary: "Tasa de error elevada en transacciones (HTTP 5xx)"
-        labels:
-          severity: "critical"
-          team: "operaciones"
-
-      - uid: "no_logs_data_02"
-        title: "No se visualizan logs o trazas en Grafana"
-        condition: "C"
         data:
-          - refId: "A"
+          - refId: A
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: "prometheus"
+            datasourceUid: DS_PROMETHEUS
             model:
-              expr: "absent(rate(otelcol_receiver_accepted_log_records[5m])) or up{job=\"loki\"} == 0"
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: "A"
-          - refId: "C"
-            datasourceUid: "__expr__"
-            model:
-              conditions:
-                - evaluator:
-                    params: [0]
-                    type: "gt"
-                  operator:
-                    type: "and"
-                  query:
-                    params: ["A"]
-                  reducer:
-                    params: []
-                    type: "last"
-                  type: "query"
               datasource:
-                type: "__expr__"
-                uid: "__expr__"
-              expression: "A"
+                type: prometheus
+                uid: DS_PROMETHEUS
+              editorMode: code
+              expr: "time() - max(sql_poller_last_success_timestamp) > 300"
+              instant: true
               intervalMs: 1000
+              legendFormat: "__auto"
               maxDataPoints: 43200
-              refId: "C"
-              type: "threshold"
-        noDataState: Alerting
-        execErrState: Error
-        for: 5m
+              range: false
+              refId: A
+        labels:
+          severity: "critical"
         annotations:
-          description: "No se obtienen resultados al consultar Loki o Tempo. El colector OpenTelemetry o Loki cayeron."
-          summary: "Ausencia de logs/trazas en la plataforma"
+          summary: "El SQL Poller no ha publicado métricas frescas en más de 5 minutos."
+        isPaused: false
+
+      - uid: "alert_poller_fail_02"
+        title: "Fallos Consecutivos (Poller)"
+        condition: A
+        for: 0s
+        noDataState: NoData
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              datasource:
+                type: prometheus
+                uid: DS_PROMETHEUS
+              editorMode: code
+              expr: "max(sql_poller_consecutive_failures) >= 2"
+              instant: true
+              intervalMs: 1000
+              legendFormat: "__auto"
+              maxDataPoints: 43200
+              range: false
+              refId: A
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "La conexión de base de datos o el query SQL del poller ha fallado repetidamente."
+        isPaused: false
+
+      - uid: "alert_pending_old_03"
+        title: "Backlog Estancado (> 5m)"
+        condition: A
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              datasource:
+                type: prometheus
+                uid: DS_PROMETHEUS
+              editorMode: code
+              expr: "max(tx_pending_oldest_seconds) >= 300"
+              instant: true
+              intervalMs: 1000
+              legendFormat: "__auto"
+              maxDataPoints: 43200
+              range: false
+              refId: A
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "Existen retenciones transaccionales que superan el SLA de 5 minutos."
+        isPaused: false
+
+      - uid: "alert_pending_ratio_04"
+        title: "Pending Ratio Crítico (> 2%)"
+        condition: A
+        for: 0s
+        noDataState: NoData
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              datasource:
+                type: prometheus
+                uid: DS_PROMETHEUS
+              editorMode: code
+              expr: "sum(tx_pending_count_24h) / clamp_min(sum(tx_created_total_24h), 1) > 0.02"
+              instant: true
+              intervalMs: 1000
+              legendFormat: "__auto"
+              maxDataPoints: 43200
+              range: false
+              refId: A
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "Acumulación peligrosa de transacciones no resueltas vs el volumen creado en 24h."
+        isPaused: false
+
+      - uid: "alert_error_rate_05"
+        title: "Error Rate Elevado (> 2%)"
+        condition: A
+        for: 0s
+        noDataState: NoData
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              datasource:
+                type: prometheus
+                uid: DS_PROMETHEUS
+              editorMode: code
+              expr: "sum(tx_error_count_24h) / clamp_min(sum(tx_created_total_24h), 1) > 0.02"
+              instant: true
+              intervalMs: 1000
+              legendFormat: "__auto"
+              maxDataPoints: 43200
+              range: false
+              refId: A
+        labels:
+          severity: "critical"
+        annotations:
+          summary: "Proporción masiva de errores técnicos o rechazos procesales (Estado 2,4,5,15)."
+        isPaused: false
+
+  - orgId: 1
+    name: "ObsBank - Mediana Prioridad"
+    folder: "Alertas Operativas"
+    interval: 5m
+    rules:
+      - uid: "alert_vol_drop_01"
+        title: "Caída de Volumen vs Baseline"
+        condition: A
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              datasource:
+                type: prometheus
+                uid: DS_PROMETHEUS
+              editorMode: code
+              expr: "((sum(tx_created_total_24h) - avg_over_time((sum(tx_created_total_24h))[14d:1d])) / clamp_min(avg_over_time((sum(tx_created_total_24h))[14d:1d]), 1)) < -0.30"
+              instant: true
+              intervalMs: 1000
+              legendFormat: "__auto"
+              maxDataPoints: 43200
+              range: false
+              refId: A
         labels:
           severity: "warning"
-          team: "infraestructura"
+        annotations:
+          summary: "El volumen operado en 24h cayó más del 30% respecto al comportamiento normal de los últimos 14 días. Posible falla de canal."
+        isPaused: false
+
+      - uid: "alert_fcm_bridge_02"
+        title: "FCM Bridge - Fallos Activos"
+        condition: A
+        for: 0s
+        noDataState: NoData
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: DS_LOKI
+            model:
+              datasource:
+                type: loki
+                uid: DS_LOKI
+              editorMode: code
+              expr: "sum(rate({service_name=\"fcm-bridge\"} |= \"error\" [5m])) > 0.1"
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+        labels:
+          severity: "warning"
+        annotations:
+          summary: "Se ha detectado flujo continuo de logs de error en el servicio de notificaciones móviles."
+        isPaused: false

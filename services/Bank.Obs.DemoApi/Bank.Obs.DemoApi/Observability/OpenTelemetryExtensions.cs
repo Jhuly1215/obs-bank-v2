@@ -35,6 +35,11 @@ public static class OpenTelemetryExtensions
                 tracing
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
+                    .AddSqlClientInstrumentation(options => 
+                    {
+                        // IMPORTANTE PARA PRODUCCIÓN: Permite ver el texto del query SQL en la traza (cuidado con PII en prod)
+                        options.SetDbStatementForText = true; 
+                    })
                     .AddOtlpExporter(otlp =>
                     {
                         otlp.Endpoint = meta.OtlpEndpoint;

@@ -1,6 +1,13 @@
 services:
+  # =========================
+  # Colector OTLP
+  # 4317/4318 permanecen expuestos para recibir trazas de las APIs externas
+  # (ej: API EconetTransacciones)
+  # =========================
   otel-collector:
-    ports: []
+    ports:
+      - "${OTLP_GRPC_PORT:-4317}:4317"
+      - "${OTLP_HTTP_PORT:-4318}:4318"
     restart: unless-stopped
 
   prometheus:
@@ -23,22 +30,30 @@ services:
 
   grafana:
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     restart: unless-stopped
     env_file:
-      - ./deploy/prod/.env
+      - deploy/prod/.env
     volumes:
-      # Sobrescribimos el archivo local mock con la configuracion real de AD
+      # Sobreescribe el archivo ldap mock con la configuración real de AD corporativo
       - ./deploy/prod/ldap.prod.toml:/etc/grafana/ldap.toml:ro
+      # grafana.ini con domain/root_url leídos del .env en lugar de hardcodeados
+      - ./observability/grafana/grafana.prod.ini:/etc/grafana/grafana.ini:ro
 
   alloy:
     ports: []
     restart: unless-stopped
+    environment:
+      ALLOY_ENV: "${ALLOY_ENV:-prod}"
     volumes:
       - alloy_data_prod:/var/lib/alloy/data
-      # Sobrescribe la ruta de los logs locales por la ruta de Producción real definida en .env
+      # Ruta real de logs de Producción (definida en .env como PROD_LOGS_PATH)
       - ${PROD_LOGS_PATH:-/var/log/banco}:/var/log/bank-apis:ro
+      # Config Alloy de producción (env=prod, rutas de logs reales)
+      - ./observability/alloy/config.alloy.prod:/etc/alloy/config.alloy:ro
 
+  # En Producción la demo-api no expone puertos al host.
+  # Para depuración temporal, incluir docker-compose.expose-demo.yml
   demo-api:
     ports: []
     restart: unless-stopped
@@ -47,6 +62,15 @@ services:
 
   sql-poller:
     restart: unless-stopped
+    environment:
+      SqlPoller__ConnectionString: "${SQLSERVER_CONN}"
+      SqlPoller__IntervalSeconds: "${SQL_POLLER_INTERVAL:-60}"
+
+  fcm-bridge:
+    ports: []
+    restart: unless-stopped
+    environment:
+      BRIDGE_API_KEY: "${BRIDGE_API_KEY}"
 
   redis:
     ports: []
@@ -54,7 +78,7 @@ services:
     volumes:
       - redis_data_prod:/data
 
-  # Desactivamos el mock server de LDAP en Producción
+  # El mock LDAP OpenLDAP se deshabilita en Producción (se usa AD real vía ldap.prod.toml)
   openldap:
     profiles:
       - disable

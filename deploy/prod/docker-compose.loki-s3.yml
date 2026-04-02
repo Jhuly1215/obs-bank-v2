@@ -1,7 +1,7 @@
 services:
   loki:
     env_file:
-      - ./deploy/prod/.env
+      - deploy/prod/.env
     environment:
       LOKI_S3_BUCKET: "${LOKI_S3_BUCKET}"
       LOKI_S3_ENDPOINT: "${LOKI_S3_ENDPOINT}"

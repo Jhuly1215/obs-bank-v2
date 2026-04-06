@@ -1,0 +1,35 @@
+[[servers]]
+# Endpoint corporativo Active Directory de Ecofuturo
+# TODO: Reemplazar por la IP real del Controlador de Dominio (ej. 10.5.1.20)
+host = "10.0.0.10"
+port = 389 
+use_ssl = false
+
+# Credenciales de la Cuenta de Servicio (Bind) leídas desde el .env
+# TODO: Asegurar que el Bind DN apunte a la OU correcta de tu Service Account
+bind_dn = "CN=svc_grafana_ldap,OU=ServiceAccounts,DC=adecofuturo,DC=bo"
+# La contraseña viene inyectada de forma segura desde GF_AUTH_LDAP_BIND_PASSWORD o LDAP_BIND_PASSWORD
+bind_password = "${LDAP_BIND_PASSWORD}"
+
+# Ruteo y Búsqueda (Filtro estándar base Active Directory sAMAccountName)
+search_filter = "(sAMAccountName=%s)"
+# TODO: Cambiar al nodo principal donde están los usuarios del banco
+search_base_dns = ["OU=Empleados,DC=adecofuturo,DC=bo"]
+
+[servers.attributes]
+# Taxonomía y sintaxis estándar de atributos AD
+name = "givenName"
+surname = "sn"
+username = "sAMAccountName"
+member_of = "memberOf"
+email =  "mail"
+
+[[servers.group_mappings]]
+# Mapeo Rol Administrador: Pertenencia a grupo corporativo "GG-Grafana-Admins" o similar
+group_dn = "CN=GG-Grafana-Admins,OU=SecurityGroups,DC=adecofuturo,DC=bo"
+org_role = "Admin"
+
+[[servers.group_mappings]]
+# Mapeo Rol Visor: Pertenencia a grupo corporativo "GG-Grafana-Viewers"
+group_dn = "CN=GG-Grafana-Viewers,OU=SecurityGroups,DC=adecofuturo,DC=bo"
+org_role = "Viewer"

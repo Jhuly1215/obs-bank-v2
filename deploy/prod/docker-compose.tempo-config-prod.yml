@@ -1,0 +1,7 @@
+services:
+  tempo:
+    command:
+      - -config.file=/etc/tempo.yaml
+      - -config.expand-env=true
+    volumes:
+      - ./observability/tempo.s3.yml:/etc/tempo.yaml:ro

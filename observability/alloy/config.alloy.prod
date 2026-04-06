@@ -1,0 +1,29 @@
+logging {
+  level = "info"
+}
+
+local.file_match "bank_logs" {
+  path_targets = [
+    { "__path__" = "/var/log/bank-apis/InterbancariaAsyncAPI/*.log",                  service_name = "InterbancariaAsyncAPI",              format = "text" },
+    { "__path__" = "/var/log/bank-apis/TransaccionInternaApi/*.log",                  service_name = "TransaccionInternaApi",              format = "text" },
+    { "__path__" = "/var/log/bank-apis/logsEconetTransacciones/*.json",               service_name = "EconetTransacciones",               format = "json" },
+    { "__path__" = "/var/log/bank-apis/logsEconetTransaccionesInterbancarias/*.json", service_name = "EconetTransaccionesInterbancarias", format = "json" },
+  ]
+}
+
+loki.source.file "bank_files" {
+  targets       = local.file_match.bank_logs.targets
+  forward_to    = [loki.write.default.receiver]
+  tail_from_end = false
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+  external_labels = {
+    source = "alloy-file",
+    // Lee el ambiente desde la variable de entorno ALLOY_ENV (definida en .env)
+    env    = env("ALLOY_ENV"),
+  }
+}

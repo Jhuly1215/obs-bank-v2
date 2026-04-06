@@ -7,34 +7,43 @@ namespace Bank.Obs.DemoApi.Observability;
 
 public static class OpenTelemetryExtensions
 {
-    public static WebApplicationBuilder AddObservability(this WebApplicationBuilder builder, ServiceMetadata meta)
+    public static WebApplicationBuilder AddObservability(
+        this WebApplicationBuilder builder,
+        ServiceMetadata meta)
     {
-        var resourceBuilder = ResourceBuilder.CreateDefault()
-            .AddService(serviceName: meta.Name, serviceVersion: meta.Version);
+        ResourceBuilder resourceBuilder = ResourceBuilder
+            .CreateDefault()
+            .AddService(
+                serviceName: meta.Name,
+                serviceVersion: meta.Version);
 
         builder.Logging.ClearProviders();
         builder.Logging.AddConsole();
 
-        builder.Logging.AddOpenTelemetry(o =>
+        builder.Logging.AddOpenTelemetry(options =>
         {
-            o.SetResourceBuilder(resourceBuilder);
-            o.IncludeScopes = true;
-            o.IncludeFormattedMessage = true;
-
-            o.AddOtlpExporter(otlp =>
+            options.SetResourceBuilder(resourceBuilder);
+            options.IncludeScopes = true;
+            options.IncludeFormattedMessage = true;
+            options.AddOtlpExporter(otlp =>
             {
                 otlp.Endpoint = meta.OtlpEndpoint;
                 otlp.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.Grpc;
             });
         });
 
-        builder.Services.AddOpenTelemetry()
-            .ConfigureResource(r => r.AddService(meta.Name, meta.Version))
+        builder.Services
+            .AddOpenTelemetry()
+            .ConfigureResource(resource =>
+            {
+                resource.AddService(meta.Name, meta.Version);
+            })
             .WithTracing(tracing =>
             {
                 tracing
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
+                    .AddSqlClientInstrumentation()
                     .AddOtlpExporter(otlp =>
                     {
                         otlp.Endpoint = meta.OtlpEndpoint;

@@ -12,7 +12,6 @@ services:
     ports:
       - "4317:4317" # OTLP gRPC
       - "4318:4318" # OTLP HTTP
-      - "8889:8889" # Prometheus scrape endpoint del collector
     networks: [ obs ]
 
   prometheus:
@@ -20,8 +19,6 @@ services:
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prom_data:/prometheus
-    ports:
-      - "9090:9090"
     networks: [ obs ]
 
   loki:
@@ -30,8 +27,6 @@ services:
     volumes:
       - ./observability/loki-config.yml:/etc/loki/config.yml:ro
       - loki_data:/loki
-    ports:
-      - "3100:3100"
     networks: [ obs ]
 
   tempo:
@@ -40,10 +35,6 @@ services:
     volumes:
       - ./observability/tempo.yml:/etc/tempo.yaml:ro
       - tempo_data:/var/tempo
-    ports:
-      - "3200:3200"
-      # opcional: recibir OTLP directo en Tempo (normalmente entra por collector)
-      - "4319:4317"
     networks: [ obs ]
 
   grafana:
@@ -95,8 +86,6 @@ services:
       - --server.http.listen-addr=0.0.0.0:12345
       - --storage.path=/var/lib/alloy/data
       - /etc/alloy/config.alloy
-    ports:
-      - "12345:12345"
     volumes:
       - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - ./sample-logs:/var/log/bank-apis:ro
@@ -163,8 +152,6 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /etc/secrets/firebase-service-account.json
       # Pasamos el bearer token de autenticación
       BRIDGE_API_KEY: ${BRIDGE_API_KEY:-dev_key_super_secret_123}
-    ports:
-      - "5001:8080"
     volumes:
       # Montamos el service-account desde observability/certs (se asume que el user lo pegará allí)
       - ./observability/certs/firebase-service-account.json:/etc/secrets/firebase-service-account.json:ro

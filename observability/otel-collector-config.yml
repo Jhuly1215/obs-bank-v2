@@ -8,10 +8,21 @@ receivers:
 
 processors:
   batch:
+    send_batch_size: 1000
+    timeout: 5s
   memory_limiter:
     check_interval: 1s
-    limit_mib: 512
-    spike_limit_mib: 128
+    # Aumentado para soportar volumen de producción con múltiples servicios enviando trazas
+    limit_mib: 1024
+    spike_limit_mib: 256
+
+  # Añade el atributo service.name como label en Loki
+  # Los logs de "Econet-Transacciones-API" y "bank-sql-poller" quedan separados en Grafana
+  resource/loki_labels:
+    attributes:
+      - action: insert
+        key: loki.resource.labels
+        value: service.name, service.version
 
 exporters:
   prometheus:
@@ -22,30 +33,33 @@ exporters:
   loki:
     endpoint: "http://loki:3100/loki/api/v1/push"
     default_labels_enabled:
-      exporter: true
+      exporter: false   # Evita label ruidoso
       job: true
+      level: true       # Nivel de log (info/warn/error) disponible en Loki
 
   otlp/tempo:
     endpoint: "tempo:4317"
     tls:
       insecure: true
 
-  debug:
-    verbosity: detailed
+  # El exporter debug se ELIMINA de producción — genera log verboso masivo
+  # Para re-habilitarlo en dev, agregar "debug" al pipeline y descomentar:
+  # debug:
+  #   verbosity: detailed
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp/tempo, debug]
+      exporters: [otlp/tempo]
 
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [prometheus, debug]
+      exporters: [prometheus]
 
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
-      exporters: [loki, debug]
+      processors: [memory_limiter, resource/loki_labels, batch]
+      exporters: [loki]

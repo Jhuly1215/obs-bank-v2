@@ -23,10 +23,28 @@ Diseñado para iniciar en 5 segundos sin pedir bases de datos previas o red dist
 * **`observability/*.yml` (sin sufijos)**: Contienen la parametrización más blanda y por defecto de cada elemento.
 
 ### 🏭 1.2 Entorno Producción (S3, Retenciones y Seguridad)
-El directorio crucial **`deploy/prod/`** es la clave de bóveda de ObsBank-v2. Actúa encapsulando el arranque inyectando Overrides (Sobreescrituras) sobre tu base que le transforman totalmente el comportamiento:
-* **`deploy/prod/.env`**: El archivo que contiene *los secretos reales*. Nunca se debe publicar en Git crudo, contiene el Active Directory Passwords (LDAP), URLs Productivas, Base de datos SQL reales y tu S3 `MINIO_ROOT_PASSWORD`.
-* **`deploy/prod/docker-compose.prod.yml`**: Al inyectarse, *desautoriza* el guardado directo de Loki y Tempo, y los reconvierte obligándolos a buscar un host S3 (`http://minio:9000`). Además levanta tu contenedor de almacenamiento en red local **MinIO**. Apaga servicios Mock/Dummy para forzar despliegues auténticos y le esconde a la red pública (host ports) las IPs de los componentes.
-* **`observability/loki-config.prod.yml` | `tempo.s3.yml`**: Las arquitecturas complejas de `aws:s3`, habilitadas para generar miles de chunks al disco tolerante y manejar `max_look_back_period`.
+El directorio crucial **`deploy/prod/`** es la clave de bóveda de ObsBank-v2. Actúa encapsulando el arranque inyectando Overrides (Sobreescrituras) sobre tu base que le transforman totalmente el comportamiento.
+
+**Estructura estricta de los archivos usados en PROD:**
+```text
+📦 obs-bank-v2
+ ┣ 📂 deploy/prod
+ ┃ ┣ 📜 .env                                 # (CEREBRO: Contraseñas Reales SQL, LDAP, S3 Minio, Firebase)
+ ┃ ┣ 📜 docker-compose.prod.yml              # (ORQUESTADOR: Unifica MinIO, Loki/Tempo S3, Redes Cerradas)
+ ┃ ┣ 📜 ldap.prod.toml                       # (Autenticación Oficial Corporativa Active Directory para Grafana)
+ ┃ ┗ 📂 config                               # (CONFIGURACIONES PURAS DE PRODUCCIÓN)
+ ┃   ┣ 📜 loki.yml                           # (Fuerza a Loki a comprimir logs a largo plazo hacia AWS/MinIO local)
+ ┃   ┣ 📜 tempo.yml                          # (Fuerza a Tempo a ingestar Trazas al bucket S3 de retención)
+ ┃   ┣ 📜 alloy.alloy                        # (Lector de logs de producción, mapea rutas reales)
+ ┃   ┗ 📜 grafana.ini                        # (Reemplaza el INI quemado por uno dinámico atado a dominios reales)
+ ┃
+ ┣ 📂 observability                          # (AQUÍ SOLO QUEDARON LOS ARCHIVOS DE DESARROLLO/LOCAL)
+ ┃
+ ┗ 📜 deploy.prod.ps1                        # (Script finalizador: Une la matriz de Desarrollo con todos los archivos de Arriba)
+```
+
+**Resumen de transformaciones al inyectar Prod:**
+Al levantar la estructura de arriba, se *desautoriza* el guardado directo de Loki y Tempo reconvirtiéndolos a S3 (`http://minio:9000`), se levanta el almacén local en bloque (`MinIO`), se apagan servicios Mock Dummy de desarrollo y la red pública esconde las IPs sensibles.
 
 ---
 
@@ -55,11 +73,18 @@ Es altamente vital correrlo con el script Powershell que condensa la lógica de 
 
 ## 🔧 3. Guía de Configuraciones Vitales
 
-### 3.1 Conexión al Active Directory (Grafana AD/LDAP)
-Si el Banco quiere permitir inicio de sesiones a Grafana logeándose con las credenciales de Windows, editar:
-1. Tocar el archivo **`deploy/prod/ldap.prod.toml`**.
-2. Llenar el host (`host = "ad.tudominio.com"`), port (389 o 636) y el `bind_dn` que debe coincidir con el usuario administrador en tu dominio.
+### 3.1 Conexión al Active Directory y Dominios Corporativos (Grafana)
+Grafana se comporta diferente según el entorno:
+- **Desarrollo:** Depende ciegamente del archivo estático `observability/grafana/grafana.ini` donde el `domain` y el `root_url` están "hardcodeados" a localhost (Variables de entorno como `GF_SERVER_DOMAIN` son ignoradas intencionalmente para no romper pruebas).
+- **Producción:** Implementa el archivo `grafana.prod.ini` el cual SI lee los valores dinámicos `GF_SERVER_DOMAIN` y `GF_SERVER_ROOT_URL` de tu archivo `.env` (`deploy/prod/.env`).
+
+Si el Banco requiere inicio con AD (LDAP):
+1. Edita el archivo **`deploy/prod/ldap.prod.toml`**.
+2. Llenar el host (`host = "ad.tudominio.com"`), port (389 o 636) y el `bind_dn`.
 3. La contraseña de lectura (`bind_password`) se inyecta desde **`deploy/prod/.env` (LDAP_BIND_PASSWORD)** por seguridad.
+
+### 3.1b Envío de Correo (SMTP)
+**Nota importante sobre Desarrollo vs Producción**: Históricamente la variable `GF_SMTP_FROM_ADDRESS` estaba estática (`jhulsdev@gmail.com`) en el `docker-compose.yml` de desarrollo. Ya ha sido reparada para usar siempre variables, pero asegúrate de definir `GF_SMTP_FROM_ADDRESS` en tu `.env` sin importar si actúas en DEV o PROD.
 
 ### 3.2 SQL Poller (Conexión Base de Datos Transaccional)
 1. Abrir **`deploy/prod/.env`** (O tu raíz `.env` si es desarrollo).
@@ -73,7 +98,9 @@ Si el Banco quiere permitir inicio de sesiones a Grafana logeándose con las cre
 Para que las Alertas rojas de Grafana brinquen a la App Móvil:
 1. Generar la clave de Firebase de tu consola Google Developers `firebase-service-account.json`.
 2. Pegar este archivo literal en la carpeta **`observability/certs/`**.
-3. Asegurar que en Grafana (Contact Points), el webhook está apuntando a `http://fcm-bridge:5000/api/alert` adjuntando a la cabecera `Authorization: Bearer <Tu-BRIDGE_API_KEY>`. La API key está en el campo de tu archivo `.env`.
+3. Asegurar que en Grafana (Contact Points), el webhook está configurado a la ruta oficial única:
+   👉 **`http://fcm-bridge:8080/alert`** (Método POST).
+4. Adjuntar en el Alerting a la cabecera HTTP: `Authorization: Bearer <Tu-BRIDGE_API_KEY>`. La API key extraída de tu `.env`.
 
 ### 3.4 Configuración del Servidor S3 MinIO en Producción
 Para soportar terabytes de logs bancarios sin cuelgues usando Tempo/Loki:

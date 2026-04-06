@@ -1,8 +1,0 @@
-# Override temporal para testing: expone puertos de MinIO al host
-# USO: agregar este overlay al comando de arranque para pruebas locales
-# NUNCA usar en producción real
-services:
-  minio:
-    ports:
-      - "9000:9000"   # API de MinIO (también accesible en S3)
-      - "9001:9001"   # Consola Web de MinIO

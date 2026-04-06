@@ -68,7 +68,7 @@ services:
       LOKI_S3_REGION: "${LOKI_S3_REGION}"
     volumes:
       - loki_data_prod:/loki
-      - ./observability/loki-config.prod.yml:/etc/loki/config.yml:ro
+      - ./deploy/prod/config/loki.yml:/etc/loki/config.yml:ro
 
   # =========================
   # TEMPO (USANDO AWS S3 MINIO)
@@ -89,7 +89,7 @@ services:
       TEMPO_S3_INSECURE: "${TEMPO_S3_INSECURE}"
     volumes:
       - tempo_data_prod:/var/tempo
-      - ./observability/tempo.s3.yml:/etc/tempo.yaml:ro
+      - ./deploy/prod/config/tempo.yml:/etc/tempo.yaml:ro
 
   # =========================
   # GRAFANA & AD
@@ -102,7 +102,7 @@ services:
       - deploy/prod/.env
     volumes:
       - ./deploy/prod/ldap.prod.toml:/etc/grafana/ldap.toml:ro
-      - ./observability/grafana/grafana.prod.ini:/etc/grafana/grafana.ini:ro
+      - ./deploy/prod/config/grafana.ini:/etc/grafana/grafana.ini:ro
 
   alloy:
     ports: []
@@ -112,7 +112,7 @@ services:
     volumes:
       - alloy_data_prod:/var/lib/alloy/data
       - ${PROD_LOGS_PATH:-/var/log/banco}:/var/log/bank-apis:ro
-      - ./observability/alloy/config.alloy.prod:/etc/alloy/config.alloy:ro
+      - ./deploy/prod/config/alloy.alloy:/etc/alloy/config.alloy:ro
 
   demo-api:
     ports: []

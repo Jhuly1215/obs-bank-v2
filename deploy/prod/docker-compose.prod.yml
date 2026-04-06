@@ -2,7 +2,6 @@ services:
   # =========================
   # Colector OTLP
   # 4317/4318 permanecen expuestos para recibir trazas de las APIs externas
-  # (ej: API EconetTransacciones)
   # =========================
   otel-collector:
     ports:
@@ -16,18 +15,85 @@ services:
     volumes:
       - prom_data_prod:/prometheus
 
+  # =========================
+  # MINIO S3 (ALMACENAMIENTO DE PRODUCCIÓN)
+  # =========================
+  minio:
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    env_file:
+      - ./deploy/prod/.env
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+    volumes:
+      - minio_data_prod:/data
+    networks:
+      - obs
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-01-17T23-25-50Z
+    depends_on:
+      - minio
+    networks:
+      - obs
+    env_file:
+      - ./deploy/prod/.env
+    entrypoint: >
+      /bin/sh -c " until /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do
+        echo 'waiting for minio...'; sleep 2;
+      done; /usr/bin/mc mb -p local/${MINIO_BUCKET_LOKI} || true; /usr/bin/mc mb -p local/${MINIO_BUCKET_TEMPO} || true; /usr/bin/mc anonymous set none local/${MINIO_BUCKET_LOKI} || true; /usr/bin/mc anonymous set none local/${MINIO_BUCKET_TEMPO} || true; echo 'minio buckets ready'; exit 0; "
+    restart: "no"
+
+  # =========================
+  # LOKI (USANDO AWS S3 MINIO)
+  # =========================
   loki:
     ports: []
     restart: unless-stopped
+    command:
+      - -config.file=/etc/loki/config.yml
+      - -config.expand-env=true
+    env_file:
+      - deploy/prod/.env
+    environment:
+      LOKI_S3_BUCKET: "${LOKI_S3_BUCKET}"
+      LOKI_S3_ENDPOINT: "${LOKI_S3_ENDPOINT}"
+      LOKI_S3_ACCESS_KEY: "${LOKI_S3_ACCESS_KEY}"
+      LOKI_S3_SECRET_KEY: "${LOKI_S3_SECRET_KEY}"
+      LOKI_S3_REGION: "${LOKI_S3_REGION}"
     volumes:
       - loki_data_prod:/loki
+      - ./observability/loki-config.prod.yml:/etc/loki/config.yml:ro
 
+  # =========================
+  # TEMPO (USANDO AWS S3 MINIO)
+  # =========================
   tempo:
     ports: []
     restart: unless-stopped
+    command:
+      - -config.file=/etc/tempo.yaml
+      - -config.expand-env=true
+    env_file:
+      - deploy/prod/.env
+    environment:
+      TEMPO_S3_BUCKET: "${TEMPO_S3_BUCKET}"
+      TEMPO_S3_ENDPOINT: "${TEMPO_S3_ENDPOINT}"
+      TEMPO_S3_ACCESS_KEY: "${TEMPO_S3_ACCESS_KEY}"
+      TEMPO_S3_SECRET_KEY: "${TEMPO_S3_SECRET_KEY}"
+      TEMPO_S3_INSECURE: "${TEMPO_S3_INSECURE}"
     volumes:
       - tempo_data_prod:/var/tempo
+      - ./observability/tempo.s3.yml:/etc/tempo.yaml:ro
 
+  # =========================
+  # GRAFANA & AD
+  # =========================
   grafana:
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
@@ -35,9 +101,7 @@ services:
     env_file:
       - deploy/prod/.env
     volumes:
-      # Sobreescribe el archivo ldap mock con la configuración real de AD corporativo
       - ./deploy/prod/ldap.prod.toml:/etc/grafana/ldap.toml:ro
-      # grafana.ini con domain/root_url leídos del .env en lugar de hardcodeados
       - ./observability/grafana/grafana.prod.ini:/etc/grafana/grafana.ini:ro
 
   alloy:
@@ -47,13 +111,9 @@ services:
       ALLOY_ENV: "${ALLOY_ENV:-prod}"
     volumes:
       - alloy_data_prod:/var/lib/alloy/data
-      # Ruta real de logs de Producción (definida en .env como PROD_LOGS_PATH)
       - ${PROD_LOGS_PATH:-/var/log/banco}:/var/log/bank-apis:ro
-      # Config Alloy de producción (env=prod, rutas de logs reales)
       - ./observability/alloy/config.alloy.prod:/etc/alloy/config.alloy:ro
 
-  # En Producción la demo-api no expone puertos al host.
-  # Para depuración temporal, incluir docker-compose.expose-demo.yml
   demo-api:
     ports: []
     restart: unless-stopped
@@ -78,7 +138,6 @@ services:
     volumes:
       - redis_data_prod:/data
 
-  # El mock LDAP OpenLDAP se deshabilita en Producción (se usa AD real vía ldap.prod.toml)
   openldap:
     profiles:
       - disable
@@ -89,3 +148,4 @@ volumes:
   tempo_data_prod:
   alloy_data_prod:
   redis_data_prod:
+  minio_data_prod:

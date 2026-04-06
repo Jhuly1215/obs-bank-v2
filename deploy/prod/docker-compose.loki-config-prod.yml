@@ -1,4 +1,7 @@
 services:
   loki:
+    command:
+      - -config.file=/etc/loki/config.yml
+      - -config.expand-env=true
     volumes:
       - ./observability/loki-config.prod.yml:/etc/loki/config.yml:ro

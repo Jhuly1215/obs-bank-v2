@@ -1,0 +1,587 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "obsbank_operacion_core",
+      "folder": "ObsBank Alertas",
+      "interval": "60s",
+      "rules": [
+        {
+          "uid": "obs_stale_crit",
+          "title": "SqlPollerStaleCritical",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "PBFA97CFB590B2093",
+              "model": {
+                "expr": "clamp_min(time() - max(sql_poller_last_success_timestamp{service_name=\"bank-sql-poller\"}), 0)",
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        300
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "dashboardUid": "obsbank-operacion-v31",
+          "panelId": 108,
+          "noDataState": "Alerting",
+          "execErrState": "Alerting",
+          "for": "2m",
+          "annotations": {
+            "summary": "Staleness del poller >= 300s",
+            "description": "El sql-poller no reporta éxito reciente. Esto compromete la validez de las métricas del dashboard.",
+            "__dashboardUid__": "obsbank-operacion-v31",
+            "__panelId__": "108"
+          },
+          "labels": {
+            "severity": "critical",
+            "component": "sql-poller",
+            "domain": "transactions"
+          }
+        },
+        {
+          "uid": "obs_fails_crit",
+          "title": "SqlPollerConsecutiveFailuresCritical",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "PBFA97CFB590B2093",
+              "model": {
+                "expr": "max(sql_poller_consecutive_failures{service_name=\"bank-sql-poller\"})",
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        1
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "dashboardUid": "obsbank-operacion-v31",
+          "panelId": 109,
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "2m",
+          "annotations": {
+            "summary": "Fallas consecutivas del poller >= 2",
+            "description": "El sql-poller acumula 2 o más fallas consecutivas.",
+            "__dashboardUid__": "obsbank-operacion-v31",
+            "__panelId__": "109"
+          },
+          "labels": {
+            "severity": "critical",
+            "component": "sql-poller",
+            "domain": "transactions"
+          }
+        },
+        {
+          "uid": "obs_cycle_warn",
+          "title": "SqlPollerCycleDurationHigh",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "PBFA97CFB590B2093",
+              "model": {
+                "expr": "avg_over_time(sql_poller_cycle_duration_seconds{service_name=\"bank-sql-poller\"}[15m])",
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        10
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "dashboardUid": "obsbank-operacion-v31",
+          "panelId": 138,
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "5m",
+          "annotations": {
+            "summary": "Duración media del ciclo del poller > 10s",
+            "description": "La duración media del ciclo del sql-poller en 15m supera 10 segundos.",
+            "__dashboardUid__": "obsbank-operacion-v31",
+            "__panelId__": "138"
+          },
+          "labels": {
+            "severity": "warning",
+            "component": "sql-poller",
+            "domain": "transactions"
+          }
+        },
+        {
+          "uid": "obs_oldest_crit",
+          "title": "PendingOldestCritical",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "PBFA97CFB590B2093",
+              "model": {
+                "expr": "max(tx_pending_oldest_seconds{service_name=\"bank-sql-poller\"}) * on() group_left() (sum(max by (source, estado) (tx_pending_current_count{service_name=\"bank-sql-poller\"})) > bool 0)",
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        300
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "dashboardUid": "obsbank-operacion-v31",
+          "panelId": 107,
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "3m",
+          "annotations": {
+            "summary": "Pendiente más antigua >= 300s con backlog activo",
+            "description": "Existe backlog activo y la transacción pendiente más antigua supera 300 segundos.",
+            "__dashboardUid__": "obsbank-operacion-v31",
+            "__panelId__": "107"
+          },
+          "labels": {
+            "severity": "critical",
+            "component": "sql-poller",
+            "domain": "transactions"
+          }
+        },
+        {
+          "uid": "obs_pending_ratio_warn",
+          "title": "PendingRatio24hHigh",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "PBFA97CFB590B2093",
+              "model": {
+                "expr": "(100 * sum(max by (source) (tx_pending_count_24h{service_name=\"bank-sql-poller\"})) / clamp_min(sum(max by (source) (tx_created_total_24h{service_name=\"bank-sql-poller\"})), 1)) * on() group_left() (sum(max by (source) (tx_created_total_24h{service_name=\"bank-sql-poller\"})) >= bool 50)",
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        3
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "dashboardUid": "obsbank-operacion-v31",
+          "panelId": 105,
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "5m",
+          "annotations": {
+            "summary": "Pending ratio 24h > 3%",
+            "description": "El pending ratio de 24h supera 3% y hay al menos 50 transacciones en la ventana.",
+            "__dashboardUid__": "obsbank-operacion-v31",
+            "__panelId__": "105"
+          },
+          "labels": {
+            "severity": "warning",
+            "component": "sql-poller",
+            "domain": "transactions"
+          }
+        },
+        {
+          "uid": "obs_error_rate_warn",
+          "title": "ErrorRate24hHigh",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "PBFA97CFB590B2093",
+              "model": {
+                "expr": "(100 * sum(max by (source) (tx_error_count_24h{service_name=\"bank-sql-poller\"})) / clamp_min(sum(max by (source) (tx_created_total_24h{service_name=\"bank-sql-poller\"})), 1)) * on() group_left() (sum(max by (source) (tx_created_total_24h{service_name=\"bank-sql-poller\"})) >= bool 50)",
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        3
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "dashboardUid": "obsbank-operacion-v31",
+          "panelId": 106,
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "5m",
+          "annotations": {
+            "summary": "Error rate 24h > 3%",
+            "description": "El error rate de 24h supera 3% y hay al menos 50 transacciones en la ventana.",
+            "__dashboardUid__": "obsbank-operacion-v31",
+            "__panelId__": "106"
+          },
+          "labels": {
+            "severity": "warning",
+            "component": "sql-poller",
+            "domain": "transactions"
+          }
+        },
+        {
+          "uid": "obs_inter_fail_warn",
+          "title": "InterbankTechnicalFailureRateHigh",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "PBFA97CFB590B2093",
+              "model": {
+                "expr": "(100 * max(tx_failed_technical_count_24h{service_name=\"bank-sql-poller\",source=\"inter\"}) / clamp_min(max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"inter\"}), 1)) * on() group_left() (max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"inter\"}) >= bool 20)",
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        5
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "hide": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "dashboardUid": "obsbank-operacion-v31",
+          "panelId": 156,
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "10m",
+          "annotations": {
+            "summary": "Fallas técnicas interbancarias > 5%",
+            "description": "La tasa de fallas técnicas interbancarias en 24h supera 5% con al menos 20 transacciones interbancarias.",
+            "__dashboardUid__": "obsbank-operacion-v31",
+            "__panelId__": "156"
+          },
+          "labels": {
+            "severity": "warning",
+            "component": "sql-poller",
+            "domain": "transactions"
+          }
+        }
+      ]
+    }
+  ]
+}

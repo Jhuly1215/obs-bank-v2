@@ -1,88 +1,76 @@
 # ObsBank - Despliegue a Producción
 
-Este directorio contiene los overlays de Docker Compose que transforman el entorno de desarrollo en un stack listo para producción. Todo se basa en el mecanismo de **múltiples archivos `-f`** de Docker Compose.
+Este directorio contiene los overlays y configuraciones secretas que transforman el entorno de desarrollo local en un ecosistema listamente migrado hacia Producción. 
+
+Gracias a la última unificación arquitectónica, **todo el clúster (Loki, Tempo, MinIO, Grafana AD, Alloy)** se controla desde un único archivo sobreescritor (`docker-compose.prod.yml`), simplificando enormemente el arranque.
 
 ## Prerequisitos
 
 - Docker Engine ≥ 26 instalado en el servidor.
-- Acceso de red al servidor SQL (`SQLSERVER_CONN`).
-- Cuenta de Firebase con el archivo `firebase-service-account.json` disponible.
-- Certificado CA del banco en `observability/certs/ca-banco.pem`.
+- Modificar el `.env` nativo de este directorio con tus contraseñas S3 (`MINIO_ROOT_PASSWORD`), bases de datos (`SQLSERVER_CONN`) y Active Directory.
+- Cuenta de Firebase con el archivo `firebase-service-account.json` disponible en `observability/certs/`.
 
 ---
 
 ## 1. Configurar el archivo `.env`
 
-Edita `deploy/prod/.env` con los valores reales del entorno antes de arrancar. Los campos obligatorios marcados con `CAMBIAR_*` deben ser substituidos:
+Edita **estrictamente** el archivo `deploy/prod/.env` (no el de la raíz externa) con los valores reales del entorno antes de arrancar. Ejemplo de campos críticos:
 
 ```dotenv
-GF_SECURITY_ADMIN_PASSWORD=...   # Password de Grafana admin
-SQLSERVER_CONN=Server=...        # Cadena de conexión real a SQL Server
+MINIO_ROOT_PASSWORD=...          # > 8 Caracteres Obligatorio (S3 Storage)
+SQLSERVER_CONN=Server=...        # Cadena de conexión real al Transaccional
 BRIDGE_API_KEY=...               # Clave secreta del webhook FCM
+LDAP_BIND_PASSWORD=...           # Clave del service account Active Directory
 ```
 
 ---
 
-## 2. Comandos de Arranque
+## 2. Comandos de Arranque Oficial
 
-Todos los comandos deben ejecutarse desde la **raíz del proyecto** (`obs-bank-v2/`).
+Todos los comandos deben ejecutarse obligatoriamente desde la **raíz del proyecto** (`obs-bank-v2/`). Tienes dos vías para iniciarlo:
 
-### Arranque estándar (sin MinIO, almacenamiento local en volúmenes Docker)
-```bash
-docker compose \
-  -f docker-compose.yml \
-  -f deploy/prod/docker-compose.prod.yml \
-  up -d
+### Vía Recomendada (Script Automatizado)
+Es el método más puro y a prueba de fallos humanos. Limpiará volúmenes temporales, ensamblará las capas e inyectará el `--env-file` oficial de producción:
+```powershell
+./deploy.prod.ps1
 ```
 
-### Arranque con MinIO (S3 local para Loki y Tempo - recomendado para producción real)
+### Vía Manual (Vanilla Docker Compose)
+Si te encuentras en un entorno puramente Linux o bash donde no puedes usar `.ps1`, este es el comando íntegro a correr:
 ```bash
-docker compose \
+docker compose --env-file deploy/prod/.env \
   -f docker-compose.yml \
   -f deploy/prod/docker-compose.prod.yml \
-  -f deploy/prod/docker-compose.minio.yml \
-  -f deploy/prod/docker-compose.loki-s3.yml \
-  -f deploy/prod/docker-compose.tempo-s3.yml \
-  up -d
+  up -d --build
 ```
-
-### Opción: Exponer la Demo API temporalmente (para pruebas internas)
-Agregar `-f deploy/prod/docker-compose.expose-demo.yml` al comando anterior.
+*(Nota: Ya no existen múltiples `-f` regados para loki, tempo, minio. ¡`docker-compose.prod.yml` ahora absorbe todos los sistemas per se!)*
 
 ---
 
-## 3. Puertos Expuestos al Host (Producción)
+## 3. Puertos Expuestos (Seguridad)
+
+En Producción, casi todos los sistemas están **ocultos** a la red LAN de tu Host (viven exclusivamente en la subred `obs`). Las excepciones son:
 
 | Servicio | Puerto | Descripción |
 |---|---|---|
-| Grafana | `3000` (configurable con `GRAFANA_PORT`) | UI de monitoreo |
-| OTLP gRPC | `4317` (configurable con `OTLP_GRPC_PORT`) | Ingesta de trazas/métricas desde APIs externas |
-| OTLP HTTP | `4318` (configurable con `OTLP_HTTP_PORT`) | Ingesta OTLP alternativa |
+| Grafana | `3000` | UI de análisis visual para directores y Ops. |
+| OTLP gRPC | `4317` | Receptor oficial de trazas (Usa este en tus APIs .NET/Java externas) |
+| OTLP HTTP | `4318` | Receptor alternativo HTTP para la capa OpenTelemetry |
+| MinIO Console | `9001` | Manejador Web del disco virtual S3 (Ingresar con obsbank_minio_admin) |
 
-> **Todos los demás servicios** (Prometheus, Loki, Tempo, Redis, Alloy) **NO están expuestos al host**. Se comunican internamente a través de la red Docker `obs`.
-
----
-
-## 4. Integrar una API Externa (ej: EconetTransacciones)
-
-La API de Econet debe enviar sus trazas y métricas al colector OTLP de este stack:
-
-```
-http://<IP_DEL_SERVIDOR_DOCKER>:4317   (gRPC)
-http://<IP_DEL_SERVIDOR_DOCKER>:4318   (HTTP)
-```
-
-Para instrucciones de integración en código .NET, ver: [`doc/integracion_otel_apis.md`](../../doc/integracion_otel_apis.md)
+> **Opcional:** Si deseas "abrir" los puertos del API Demo y visualizarla a fuerza bruta desde el exterior, puedes encadenar el utilitario `-f deploy/prod/docker-compose.expose-demo.yml` a tu despliegue.
 
 ---
 
-## 5. LDAP / Active Directory
+## 4. Active Directory (LDAP) Corporativo
 
-El archivo `ldap.prod.toml` contiene la configuración real del Active Directory corporativo de Ecofuturo. Revisar y ajustar:
+El archivo **`deploy/prod/ldap.prod.toml`** controla tu acceso de ventanas unificado al banco. Debes reemplazar con tu información real de SysAdmin:
 
-- `host` → IP del Controlador de Dominio real.
-- `bind_dn` → DN del Service Account de lectura.
-- `search_base_dns` → OU donde viven los usuarios.
-- `group_mappings` → DNs de los grupos de seguridad de Grafana.
+- `host` → IP de tu Controlador de Dominio principal.
+- `bind_dn` → DN del "Service Account" de lectura que buscará a los usuarios.
+- `search_base_dns` → Organizational Unit (OU) específica donde viven los usuarios de Banco.
+- `group_mappings` → Mapeo 1:1 entre tus grupos de seguridad y los roles `Admin/Editor/Viewer` en Grafana.
 
-La contraseña del bind se lee de la variable `LDAP_BIND_PASSWORD` en el `.env`.
+---
+
+Para lecturas de alto nivel sobre esta arquitectura S3, revisa el [`README.md`](../../README.md) Maestro alojado en la Raíz del proyecto.

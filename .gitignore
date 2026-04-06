@@ -37,6 +37,7 @@ TestResults/
 
 logs/
 *.log
+templogs.txt
 
 ############################
 #  OS files

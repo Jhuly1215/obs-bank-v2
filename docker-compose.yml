@@ -5,7 +5,7 @@ services:
   # CORE OBSERVABILIDAD
   # =========================
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.111.0
+    image: otel/opentelemetry-collector-contrib:0.149.0
     command: [ "--config=/etc/otelcol/config.yml" ]
     volumes:
       - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro
@@ -15,14 +15,14 @@ services:
     networks: [ obs ]
 
   prometheus:
-    image: prom/prometheus:v2.54.1
+    image: prom/prometheus:v3.11.1
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prom_data:/prometheus
     networks: [ obs ]
 
   loki:
-    image: grafana/loki:3.1.1
+    image: grafana/loki:3.7.0
     command: -config.file=/etc/loki/config.yml
     volumes:
       - ./observability/loki-config.yml:/etc/loki/config.yml:ro
@@ -30,7 +30,7 @@ services:
     networks: [ obs ]
 
   tempo:
-    image: grafana/tempo:2.10.0
+    image: grafana/tempo:2.10.3
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
       - ./observability/tempo.yml:/etc/tempo.yaml:ro
@@ -38,7 +38,7 @@ services:
     networks: [ obs ]
 
   grafana:
-    image: grafana/grafana:11.1.4
+    image: grafana/grafana:12.4.2
     container_name: grafana
     restart: unless-stopped
 
@@ -80,7 +80,7 @@ services:
   # INGESTA LOGS (TXT/JSON)
   # =========================
   alloy:
-    image: grafana/alloy:v1.13.0
+    image: grafana/alloy:v1.15.0
     command:
       - run
       - --server.http.listen-addr=0.0.0.0:12345
@@ -133,7 +133,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:7.4.8-alpine
     command: [ "redis-server", "--appendonly", "yes" ]
     volumes:
       - redis_data:/data
@@ -162,7 +162,7 @@ services:
   # MOCK LDAP OPENLDAP SERVER
   # =========================
   openldap:
-    image: rroemhild/test-openldap
+    image: osixia/openldap:1.5.0
     container_name: obs-bank-v2-ldap-1
     ports:
       - "389:389"

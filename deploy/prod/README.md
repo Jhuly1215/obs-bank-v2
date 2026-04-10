@@ -38,10 +38,7 @@ Es el método más puro y a prueba de fallos humanos. Limpiará volúmenes tempo
 ### Vía Manual (Vanilla Docker Compose)
 Si te encuentras en un entorno puramente Linux o bash donde no puedes usar `.ps1`, este es el comando íntegro a correr:
 ```bash
-docker compose --env-file deploy/prod/.env \
-  -f docker-compose.yml \
-  -f deploy/prod/docker-compose.prod.yml \
-  up -d --build
+docker compose --env-file deploy/prod/.env -f docker-compose.yml -f deploy/prod/docker-compose.prod.yml up -d --build
 ```
 *(Nota: Ya no existen múltiples `-f` regados para loki, tempo, minio. ¡`docker-compose.prod.yml` ahora absorbe todos los sistemas per se!)*
 

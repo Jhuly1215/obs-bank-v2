@@ -1,6 +1,34 @@
 name: obs-bank-v2
 
+# --- PLANTILLA DE OBSERVABILIDAD ZERO-CODE ---
+# Úsala en cualquier API externa con: <<: *otel-base
+x-otel-base: &otel-base
+  environment:
+    - CORECLR_ENABLE_PROFILING=1
+    - CORECLR_PROFILER={ff15165d-5152-4531-90f6-bc61ef90a334}
+    - CORECLR_PROFILER_PATH=/otel-auto/linux-x64/OpenTelemetry.DotNet.Auto.Native.so
+    - DOTNET_STARTUP_HOOKS=/otel-auto/net/OpenTelemetry.DotNet.Auto.dll
+    - OTEL_DOTNET_AUTO_HOME=/otel-auto
+    - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_AGENT_ENDPOINT}
+    - OTEL_LOGS_EXPORTER=${OTEL_AGENT_LOGS_EXPORT}
+    - OTEL_METRICS_EXPORTER=${OTEL_AGENT_METRICS_EXPORT}
+    - OTEL_TRACES_EXPORTER=${OTEL_AGENT_TRACES_EXPORT}
+    - OTEL_DOTNET_AUTO_LOGS_INCLUDE_FORMATTED_MESSAGE=true
+  volumes:
+    - otel_binaries:/otel-auto:ro
+  networks:
+    - obs
+  depends_on:
+    - otel-agent-provider
+    - otel-collector
+
 services:
+  # Proveedor de binarios del Agente OpenTelemetry (No requiere ejecución, solo copia archivos)
+  otel-agent-provider:
+    image: ghcr.io/open-telemetry/opentelemetry-dotnet-instrumentation/otel-dotnet-auto-instrumentation:${OTEL_AGENT_VERSION}
+    volumes:
+      - otel_binaries:/instrumentation
+
   # =========================
   # CORE OBSERVABILIDAD
   # =========================
@@ -180,3 +208,4 @@ volumes:
   tempo_data:
   alloy_data:
   redis_data:
+  otel_binaries:

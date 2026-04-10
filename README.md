@@ -120,20 +120,20 @@ Si tienes APIs de .NET publicando sus logs estructurados .txt en una capeta tipo
 
 ---
 
-## 4. Reglas Críticas de Resolución de Problemas
+## 🚀 5. Integración de Nuevas APIs .NET (Otel & Logs)
 
-**Error: "The Access Key Id you provided does not exist in our records" en Loki/Tempo**
-> **Motivo:** Cambiaste la contraseña de MinIO en `.env`, pero el contenedor del MinIO ya la había guardado en un previo encendido interno usando credenciales del disco local y ahora las desincronizó.
-> **Solución:** Mata el contenedor **Borrando su Volumen persistente** para forzar un refresco. 
-> Ejecuta en tu terminal: `docker compose down -v` O directamente suprime el disco asociado corriendo `docker volume rm obs-bank-v2_minio_data_prod` antes de volver a intentar el `./deploy.prod.ps1`.
+Para que cualquier API nueva se sume al ecosistema de observabilidad, debe implementar el estándar de **ObsBank-v2**. Esto garantiza que los logs, trazas y métricas se correlacionen automáticamente.
 
-**Error: SQL Poller con 11 Fallas o "No data" en Grafana Dashboard**
-> **Motivo:** Tu IP del MS SQL en tu cadena *SQLSERVER_CONN* es incorrecta o inalcanzable.
-> **Solución:** Recuerda que los sub-contenedores viven en una Mini-Red LAN propia ajena a tu disco C:\. Si alojaste tu DB en tu mismo Windows, no sirve poner `localhost` (para el contenedor el localhost es él mismo). Usa siempre  `host.docker.internal` en lugar de la palabra localhost en el archivo `.env`.
+### Pasos rápidos:
+1. **NuGet**: Instalar `OpenTelemetry` (Hosting, OTLP, Instrumentation) y `Serilog` (AspNetCore, Compact).
+2. **Infraestructura**: Portar las carpetas `Observability/` y `Middleware/` (ver `Bank.Obs.FcmBridge`).
+3. **Program.cs**:
+   - Inicializar `Serilog` con `CompactJsonFormatter`.
+   - Registrar `AddObservability(meta)`.
+   - Registrar middlewares: `CorrelationIdMiddleware` y `ExceptionHandlingMiddleware`.
+4. **Docker**: Configurar `OpenTelemetry__OtlpEndpoint` apuntando a `http://otel-collector:4317`.
 
-**Archivo Compose Mágicamente mal leído "El archivo o sintaxis es incorrecto" en Powershell**
-> **Motivo:** Powershell interpreta rutas en un salto de carro (`\n`) diferente a Bash.
-> **Solución:** Nuestro script `./deploy.prod.ps1` ya solventa este problema encadenando las subredes de docker mediante retrocesos de carro en línea (`\``), úsalo siempre.
+Para una guía paso a paso con ejemplos de código, consulta el [Manual de Integración de APIs](file:///C:/Users/Jhuly/.gemini/antigravity/brain/6ecc5f03-f7b0-4ae2-8fb2-6098ee3b6810/otel_api_integration_guide.md).
 
 ---
 

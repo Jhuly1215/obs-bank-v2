@@ -1,4 +1,4 @@
-﻿using Bank.Obs.DemoApi.Auth;
+using Bank.Obs.DemoApi.Auth;
 using Bank.Obs.DemoApi.Endpoints;
 using Bank.Obs.DemoApi.Middleware;
 using Bank.Obs.DemoApi.Observability;
@@ -14,6 +14,7 @@ using System.Threading.RateLimiting;
 using StackExchange.Redis;
 using Microsoft.EntityFrameworkCore;
 using Bank.Obs.DemoApi.Data;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -113,28 +114,21 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "Bank Obs Demo API", Version = "v1" });
 
     // Para Development: permitir meter Authorization header desde Swagger UI
-    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer",
         BearerFormat = "JWT",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        In = ParameterLocation.Header,
         Description = "Dev: escribe 'Dev test' o 'Bearer <token>'"
     });
 
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
         {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
+            new OpenApiSecuritySchemeReference("Bearer", document),
+            []
         }
     });
 });

@@ -1,11 +1,30 @@
+using Bank.Obs.FcmBridge.Middleware;
+using Bank.Obs.FcmBridge.Observability;
 using Bank.Obs.FcmBridge.Services;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
+using Serilog;
+using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Añadir Servicios al Contenedor (Dependency Injection)
+// --- Logging (Serilog structured JSON) ---
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .Enrich.FromLogContext()
+    .WriteTo.Console(new CompactJsonFormatter())
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// --- Metadata ---
+var meta = ServiceMetadata.FromConfiguration(builder.Configuration);
+
+// --- Observability (OpenTelemetry) ---
+builder.AddObservability(meta);
+
+// --- Services ---
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
@@ -21,18 +40,11 @@ builder.Services.AddSwaggerGen(c =>
         In = ParameterLocation.Header,
         Description = "Ingresa tu token en el formato: Bearer secreto_123_cambiar_en_produccion"
     });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
+            new OpenApiSecuritySchemeReference("Bearer", document),
+            []
         }
     });
 });
@@ -41,31 +53,40 @@ builder.Services.AddSingleton<IFcmService, FcmService>();
 
 var app = builder.Build();
 
+// --- Middlewares & Routing ---
+app.UseSerilogRequestLogging();
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Bank.Obs.FcmBridge API V1");
 });
 
-// 2. Configuración de Firebase Admin SDK
+// --- Firebase Admin SDK ---
 var credentialsPath = Environment.GetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS");
 if (string.IsNullOrEmpty(credentialsPath) || !File.Exists(credentialsPath))
 {
     app.Logger.LogWarning("GOOGLE_APPLICATION_CREDENTIALS no está configurado o el archivo no existe en la ruta: {path}", credentialsPath);
-    app.Logger.LogWarning("El servicio de Firebase no podrá enviar notificaciones hasta que se monte el secreto.");
 }
 else
 {
-    FirebaseApp.Create(new AppOptions()
+    try
     {
-        Credential = GoogleCredential.FromFile(credentialsPath)
-    });
-    app.Logger.LogInformation("Firebase Admin SDK inicializado exitosamente.");
+        FirebaseApp.Create(new AppOptions()
+        {
+            Credential = GoogleCredential.FromFile(credentialsPath)
+        });
+        app.Logger.LogInformation("Firebase Admin SDK inicializado exitosamente.");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Error al inicializar Firebase Admin SDK.");
+    }
 }
 
-// 3. Middlewares y Ruteo
-app.UseRouting();
 app.UseAuthorization();
-app.MapControllers(); // Habilita los [ApiController] como nuestro AlertController
+app.MapControllers();
 
 app.Run();

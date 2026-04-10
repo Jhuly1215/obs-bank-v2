@@ -30,12 +30,10 @@ exporters:
     resource_to_telemetry_conversion:
       enabled: true
 
-  loki:
-    endpoint: "http://loki:3100/loki/api/v1/push"
-    default_labels_enabled:
-      exporter: false   # Evita label ruidoso
-      job: true
-      level: true       # Nivel de log (info/warn/error) disponible en Loki
+  otlphttp/loki:
+    endpoint: "http://loki:3100/otlp"
+    tls:
+      insecure: true
 
   otlp/tempo:
     endpoint: "tempo:4317"
@@ -62,4 +60,4 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, resource/loki_labels, batch]
-      exporters: [loki]
+      exporters: [otlphttp/loki]

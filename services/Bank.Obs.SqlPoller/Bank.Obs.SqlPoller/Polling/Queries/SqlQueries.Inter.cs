@@ -6,6 +6,10 @@ public static partial class SqlQueries
     // INTER (TransferenciaInterbancaria)
     // ===================================
 
+    // ===================================
+    // INTER (TransferenciaInterbancaria)
+    // ===================================
+
     // 1) Distribución por estado 24h
     public const string InterStateCount24h = @"
 SELECT estado, COUNT(1) AS [Count] 
@@ -13,53 +17,56 @@ FROM TransferenciaInterbancaria
 WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE()) 
 GROUP BY estado";
 
-    // 2) Backlog activo actual por estado
-    public const string InterPendingCurrentCount = $@"
+    // 2) Backlog Operativo Real (1, 6)
+    public const string InterOpPendingCount = $@"
 SELECT estado, COUNT(1) AS [Count] 
 FROM TransferenciaInterbancaria 
-WHERE estado IN ({PendingStates}) AND fechaOperacion IS NOT NULL 
+WHERE estado IN ({OpPendingStates}) AND fechaOperacion IS NOT NULL 
 GROUP BY estado";
 
-    // 3) Aging activo por bucket y estado
+    // 3) Backlog Programado (0, 7, 17)
+    public const string InterProgrammedCount = $@"
+SELECT estado, COUNT(1) AS [Count] 
+FROM TransferenciaInterbancaria 
+WHERE estado IN ({ProgrammedStates}) AND fechaOperacion IS NOT NULL 
+GROUP BY estado";
+
+    // 4) Estado 100 (Review) - Métricas Críticas ACH
+    public const string InterReviewStats = $@"
+SELECT 
+    COUNT(1) AS TotalCount,
+    ISNULL(AVG(DATEDIFF(second, fechaOperacion, GETDATE())), 0) AS AvgSec,
+    ISNULL(MAX(DATEDIFF(second, fechaOperacion, GETDATE())), 0) AS MaxSec,
+    SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 300 THEN 1 ELSE 0 END) AS DeadCount
+FROM TransferenciaInterbancaria
+WHERE estado IN ({ReviewStates}) AND fechaOperacion IS NOT NULL";
+
+    // 5) Aging granular (Solo Operativas + 100)
     public const string InterPendingAgingBucketCount = $@"
 SELECT estado, 
        SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 14400 THEN 1 ELSE 0 END) AS Ge14400s,
        SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 3600 THEN 1 ELSE 0 END) AS Ge3600s,
        SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 900 THEN 1 ELSE 0 END) AS Ge900s
 FROM TransferenciaInterbancaria 
-WHERE estado IN ({PendingStates}) AND fechaOperacion IS NOT NULL 
+WHERE estado IN ({OpPendingStates}, {ReviewStates}) AND fechaOperacion IS NOT NULL 
 GROUP BY estado";
 
-    // 4) Edad promedio y máxima del backlog activo por estado
-    public const string InterPendingAgeStats = $@"
-SELECT estado, 
-       ISNULL(AVG(DATEDIFF(second, fechaOperacion, GETDATE())), 0) AS AvgSec, 
-       ISNULL(MAX(DATEDIFF(second, fechaOperacion, GETDATE())), 0) AS MaxSec
-FROM TransferenciaInterbancaria
-WHERE estado IN ({PendingStates}) AND fechaOperacion IS NOT NULL
-GROUP BY estado";
-
-    // 5) Rechazos vs fallas técnicas 24h
+    // 6) Fallas, Rechazos y Compensadas 24h
     public const string InterFailures24h = $@"
 SELECT
    SUM(CASE WHEN estado IN ({RejectedStates}) THEN 1 ELSE 0 END) AS Rejected,
-   SUM(CASE WHEN estado IN ({FailedTechnicalStates}) THEN 1 ELSE 0 END) AS FailedTechnical
+   SUM(CASE WHEN estado IN ({TechFailedStates}) THEN 1 ELSE 0 END) AS FailedTechnical,
+   SUM(CASE WHEN estado IN ({CompensatedStates}) THEN 1 ELSE 0 END) AS Compensated
 FROM TransferenciaInterbancaria
-WHERE estado IN ({RejectedStates}, {FailedTechnicalStates}) AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+WHERE estado IN ({RejectedStates}, {TechFailedStates}, {CompensatedStates}) 
+  AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
 
-    // 6) Volumen por tipo 24h
+    // 7) Volumen por tipo 24h
     public const string InterTypeCount24h = @"
 SELECT ISNULL(CAST(tipoTransferencia AS INT), 0) AS Tipo, COUNT(1) AS [Count] 
 FROM TransferenciaInterbancaria 
 WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE()) 
 GROUP BY tipoTransferencia";
-
-    // 7) Monto total 24h por moneda
-    public const string InterAmountTotal24h = @"
-SELECT ISNULL(CAST(monedaOperacion AS INT), 0) AS Moneda, ISNULL(SUM(monto), 0) AS Total 
-FROM TransferenciaInterbancaria 
-WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE()) 
-GROUP BY monedaOperacion";
 
     // 8) Monto 24h por tipo y moneda
     public const string InterAmountByType24h = @"
@@ -70,36 +77,36 @@ FROM TransferenciaInterbancaria
 WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE()) 
 GROUP BY tipoTransferencia, monedaOperacion";
 
-    // 9) Duración proxy de éxito por tipo (avg, p95)
+    // 9) Optimización de Latencia (P95/Avg)
     public const string InterSuccessSpeed24h = $@"
-SELECT DISTINCT ISNULL(CAST(tipoTransferencia AS INT), 0) AS Tipo,
-       ISNULL(AVG(DATEDIFF(second, fechaOperacion, fechaModificacion)) OVER (PARTITION BY tipoTransferencia), 0) AS AvgSec,
-       ISNULL(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY DATEDIFF(second, fechaOperacion, fechaModificacion) ASC) OVER (PARTITION BY tipoTransferencia), 0) AS P95Sec
-FROM TransferenciaInterbancaria
-WHERE estado IN ({ResolvedSuccessStates}) 
+WITH SuccessBase AS (
+    SELECT 
+        ISNULL(CAST(tipoTransferencia AS INT), 0) AS Tipo,
+        DATEDIFF(second, fechaOperacion, fechaModificacion) AS dur_s
+    FROM TransferenciaInterbancaria
+    WHERE estado IN ({SuccessStates}) 
       AND fechaOperacion IS NOT NULL 
       AND fechaModificacion IS NOT NULL
-      AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+      AND fechaOperacion >= DATEADD(hour, -24, GETDATE())
+)
+SELECT DISTINCT Tipo,
+       AVG(dur_s) OVER (PARTITION BY Tipo) AS AvgSec,
+       PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY dur_s ASC) OVER (PARTITION BY Tipo) AS P95Sec
+FROM SuccessBase";
 
-    // ===================================
-    // METRICAS DE INTERBANCARIAS DESTINO
-    // ===================================
-    
-    // 10.1) Volumen 24h por banco destino
+    // 10) Métricas por Banco Destino (Optimizadas)
     public const string InterBankCount24h = @"
 SELECT ISNULL(CAST(bancoDestino AS INT), 0) AS Banco, COUNT(1) AS [Count]
 FROM TransferenciaInterbancaria
 WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE())
 GROUP BY bancoDestino";
 
-    // 10.2) Distribución por estado 24h por banco destino
     public const string InterBankStateCount24h = @"
 SELECT ISNULL(CAST(bancoDestino AS INT), 0) AS Banco, estado, COUNT(1) AS [Count]
 FROM TransferenciaInterbancaria
 WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE())
 GROUP BY bancoDestino, estado";
 
-    // 10.3) Monto total 24h por banco destino y moneda
     public const string InterBankAmountTotal24h = @"
 SELECT ISNULL(CAST(bancoDestino AS INT), 0) AS Banco, 
        ISNULL(CAST(monedaOperacion AS INT), 0) AS Moneda, 
@@ -108,21 +115,55 @@ FROM TransferenciaInterbancaria
 WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE())
 GROUP BY bancoDestino, monedaOperacion";
 
-
-    // ===================================
-    // EXISTENTES / HISTORICAS
-    // ===================================
+    // Tactical Windows
+    public const string InterTxCreated5m = "SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE fechaOperacion >= DATEADD(minute, -5, GETDATE())";
     public const string InterTxCreated15m = "SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE fechaOperacion >= DATEADD(minute, -15, GETDATE())";
+    public const string InterTxCreated1h = "SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE fechaOperacion >= DATEADD(hour, -1, GETDATE())";
     public const string InterTxCreated24h = "SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE())";
-    public const string InterTxCreated7d  = "SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE fechaOperacion >= DATEADD(day, -7, GETDATE())";
+    public const string InterTxCreated7d = "SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE fechaOperacion >= DATEADD(day, -7, GETDATE())";
     public const string InterTxCreated30d = "SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE fechaOperacion >= DATEADD(day, -30, GETDATE())";
 
-    public const string InterPendingCount24h = $"SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE estado IN ({PendingStates}) AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
-    public const string InterPendingCount7d  = $"SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE estado IN ({PendingStates}) AND fechaOperacion >= DATEADD(day, -7, GETDATE())";
-    public const string InterPendingOldestSeconds = $"SELECT ISNULL(DATEDIFF(second, MIN(fechaOperacion), GETDATE()), 0) FROM TransferenciaInterbancaria WHERE estado IN ({PendingStates})";
+    public const string InterPendingCount24h = $@"SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE estado IN ({OpPendingStates}, {ReviewStates}) AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+    public const string InterPendingCount7d = $@"SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE estado IN ({OpPendingStates}, {ReviewStates}) AND fechaOperacion >= DATEADD(day, -7, GETDATE())";
 
-    public const string InterErrorCount24h = $"SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE estado IN ({RejectedStates}, {FailedTechnicalStates}) AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
-    
-    public const string InterResolvedCount24h = $"SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE estado IN ({ResolvedSuccessStates}) AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
-    public const string InterResolutionAvgSeconds = $"SELECT ISNULL(AVG(DATEDIFF(second, fechaOperacion, ISNULL(fechaModificacion, GETDATE()))), 0) FROM TransferenciaInterbancaria WHERE estado IN ({ResolvedSuccessStates}) AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+    public const string InterErrorCount24h = $@"SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE estado IN ({RejectedStates}, {TechFailedStates}) AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+    public const string InterResolvedCount24h = $@"SELECT COUNT(1) FROM TransferenciaInterbancaria WHERE estado IN ({SuccessStates}, {CompensatedStates}) AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+
+    // Legacy Support (Oldest excluding programmed)
+    public const string InterPendingOldestSeconds = $@"
+SELECT ISNULL(DATEDIFF(second, MIN(fechaOperacion), GETDATE()), 0) 
+FROM TransferenciaInterbancaria 
+WHERE estado IN ({OpPendingStates}, {ReviewStates})";
+
+    public const string InterResolutionAvgSeconds = $@"
+SELECT ISNULL(AVG(DATEDIFF(second, fechaOperacion, fechaModificacion)), 0) 
+FROM TransferenciaInterbancaria 
+WHERE estado IN ({SuccessStates}) 
+  AND fechaModificacion IS NOT NULL
+  AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+
+    // P99 Standalone
+    public const string InterSuccessSpeedP99_24h = $@"
+WITH SuccessBase AS (
+    SELECT DATEDIFF(second, fechaOperacion, fechaModificacion) AS dur_s
+    FROM TransferenciaInterbancaria
+    WHERE estado IN ({SuccessStates}) 
+      AND fechaOperacion IS NOT NULL 
+      AND fechaModificacion IS NOT NULL
+      AND fechaOperacion >= DATEADD(hour, -24, GETDATE())
+)
+SELECT ISNULL(PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY dur_s ASC), 0) FROM SuccessBase";
+
+    // Anomalies
+    public const string InterZeroDurationCount24h = $@"
+SELECT COUNT(1) FROM TransferenciaInterbancaria 
+WHERE estado IN ({SuccessStates}) 
+  AND DATEDIFF(second, fechaOperacion, fechaModificacion) = 0
+  AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+
+    public const string InterMissingModificationCount24h = $@"
+SELECT COUNT(1) FROM TransferenciaInterbancaria 
+WHERE estado IN ({SuccessStates}) 
+  AND fechaModificacion IS NULL
+  AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
 }

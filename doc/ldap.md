@@ -1,90 +1,44 @@
-# Integración y Configuración de Autenticación LDAP (Active Directory)
+# Integración Active Directory (LDAP) en ObsBank-v2
 
-Este documento detalla la arquitectura de autenticación **LDAP (Lightweight Directory Access Protocol)** implementada en Grafana para el entorno local, su funcionamiento técnico y el procedimiento de migración hacia un entorno de Producción soportado por un Controlador de Dominio Windows (Active Directory).
-
----
-
-## 1. Naturaleza de la Integración (Mock local vs. Producción)
-
-La integración configurada en el entorno local **utiliza implementaciones nativas del protocolo LDAP**, garantizando paridad arquitectónica con entornos productivos.
-
-*   **Capa de Aplicación (Grafana):** El módulo de autenticación LDAP de Grafana opera bajo configuraciones formales (`GF_AUTH_LDAP_ENABLED=true`), ejecutando operaciones de tipo `Bind` y `Search` reales sobre la red de contenedores.
-*   **Capa de Directorio (Mock Server):** Para suprimir la dependencia de conectividad con un Directorio Activo corporativo durante el desarrollo local, el stack orquesta un contenedor OpenLDAP efímero (imagen `rroemhild/test-openldap`). Este servidor de prueba expone el puerto `10389` e incluye un árbol de datos precargado (`dc=planetexpress,dc=com`) estructurado con Unidades Organizativas (`ou=people`) y cuentas de usuario funcionales (ej. `uid=fry`, `uid=bender`).
-
-Esta dualidad asegura que la transición al entorno productivo requiera exclusivamente modificaciones en la cadena de conexión, sin impacto en la lógica de autorización de la plataforma de observabilidad.
+Grafana utiliza el protocolo LDAP para autenticar a los funcionarios del Banco contra el Controlador de Dominio corporativo.
 
 ---
 
-## 2. Topología de la Configuración Local
+## 🏗️ Arquitectura de Plantillas (Automation)
 
-La integración actual se fundamenta en los siguientes componentes:
+Dado que Grafana no soporta variables de entorno nativas dentro de su archivo `ldap.toml`, ObsBank-v2 utiliza un sistema de **Pre-procesamiento de Plantillas**:
 
-1. **Docker Compose (`docker-compose.yml`)**: Provisiona el servicio local `openldap` e inicializa las variables de entorno habilitadoras en el servicio `grafana` (`GF_AUTH_LDAP_CONFIG_FILE=/etc/grafana/ldap.toml`).
-2. **Archivo de Configuración y Mapeo (`observability/grafana/ldap.toml`)**:
-   - Resuelve el endpoint interno del contenedor y su puerto expuesto para el protocolo (`host = "openldap"`, `port = 10389`).
-   - Define el *Service Account* (Cuenta de servicio) de lectura (`bind_dn = "cn=admin,dc=planetexpress,dc=com"`) y sus credenciales estáticas.
-   - Aplica filtros de búsqueda originarios OID (`search_filter = "(uid=%s)"`) sobre el *Base DN* poblado con usuarios de prueba.
-   - Establece reglas de *Group Mapping* para asignar roles internos de Grafana en base a la pertenencia de grupos LDAP (RBAC):
-     - El grupo `cn=admin_staff` otorga privilegios **`Admin`**.
-     - El grupo `cn=ship_crew` otorga privilegios **`Viewer`**.
-
-> **Validación Operativa (Testing Local):**
-> - Credenciales estándar de observador: `fry` / `fry`
-> - Credenciales con privilegios administrativos: `leela` / `leela`
+1. **Plantilla**: El archivo `observability/grafana/ldap.toml.template` (o `deploy/prod/ldap.prod.toml.template`) contiene marcadores como `${LDAP_SERVER_HOST}`.
+2. **Sidecar (Config-Init)**: Un contenedor ligero de Docker (`config-init`) procesa esta plantilla al arrancar el sistema e inyecta los valores reales desde el archivo `.env`.
+3. **Resultado**: El archivo final `/etc/grafana/ldap.toml` se genera dinámicamente cada vez que inicias el stack.
 
 ---
 
-## 3. Procedimiento de Migración a Producción (Active Directory)
+## ⚙️ Configuración vía .env
 
-Para enrutar la autenticación de Grafana hacia el controlador de dominio empresarial y habilitar el Single Sign-On (SSO) con las credenciales formales del personal, es imperativo gestionar los siguientes requisitos con el departamento de Infraestructura, Redes o Seguridad Informática (Active Directory):
+Ya no necesitas editar los archivos `.toml` manualmente. Todo se controla desde el **`.env`**:
 
--   **Endpoint del Controlador de Dominio (Domain Controller):** Dirección IP o FQDN del servidor (Ej. `10.5.1.20` o `dc01.banco.local`).
--   **Service Account (Bind DN):** Cuenta de servicio sin atributos de escritura o expiración de contraseña, destinada exclusivamente a buscar e iterar sobre el árbol del directorio. (Ej. `CN=grafana_svc,OU=ServiceAccounts,DC=mibanco,DC=com`).
--   **Base DN de Búsqueda:** Nodo principal u origin (OU) donde residen los objetos de tipo *Usuario* designados para el consumo de la plataforma (Ej. `OU=Empleados,DC=mibanco,DC=com`).
--   **Grupos de Seguridad (Security Groups):** Distinguished Names (DN) exactos de los grupos de Windows destinados a separar roles de visualización operativa y administración de dashboards.
-
-### 🔴 Configuración Técnica de Cambio de Entorno
-
-Una vez gestionadas las directivas de red corporativa y reglas de Firewall requeridas para habilitar la comunicación entre las instancias de Docker locales y el servidor Active Directory, deben aplicarse las siguientes modificaciones:
-
-#### 3.1. Reestructuración de la Orquestación
-Debe eliminarse o comentarse el servicio de simulación `openldap` en el archivo `docker-compose.yml`, dado que la consulta LDAP se emitirá directamente a la red corporativa.
-
-#### 3.2. Modificación del Descriptor TOML
-El archivo local `observability/grafana/ldap.toml` debe ser depurado y reconfigurado con los parámetros corporativos formales:
-
-```toml
-[[servers]]
-# Endpoint corporativo Active Directory
-host = "10.5.1.20"
-port = 389 
-use_ssl = false # Validar TLS. Cambiar a 'true' y configurar puerto '636' si se exige LDAPS.
-
-# Credenciales de la Cuenta de Servicio (Bind)
-bind_dn = "CN=grafana_svc,OU=ServiceAccounts,DC=mibanco,DC=com"
-bind_password = "PasswordDeServicioDefinitivo"
-
-# Ruteo y Búsqueda (Filtro estándar base Active Directory sAMAccountName)
-search_filter = "(sAMAccountName=%s)"
-search_base_dns = ["OU=Empleados,DC=mibanco,DC=com"]
-
-[servers.attributes]
-# Taxonomía y sintaxis estándar de atributos AD
-name = "givenName"
-surname = "sn"
-username = "sAMAccountName"
-member_of = "memberOf"
-email =  "mail"
-
-[[servers.group_mappings]]
-# Mapeo Rol Visor: Pertenencia a grupo corporativo "Monitoreo_Nivel1"
-group_dn = "CN=Monitoreo_Nivel1,OU=SecurityGroups,DC=mibanco,DC=com"
-org_role = "Viewer"
-
-[[servers.group_mappings]]
-# Mapeo Rol Administrador: Pertenencia a grupo corporativo "Arquitectura_Sistemas"
-group_dn = "CN=Arquitectura_Sistemas,OU=SecurityGroups,DC=mibanco,DC=com"
-org_role = "Admin"
+```env
+# --- ACTIVE DIRECTORY / LDAP ---
+LDAP_SERVER_HOST=SrvAD.banco.local
+LDAP_SERVER_PORT=389
+LDAP_BIND_DN=CN=SvcGrafana,OU=ServiceAccounts,DC=banco,DC=local
+LDAP_BIND_PASSWORD=ContraseñaSegura123
+LDAP_SEARCH_BASE=OU=Usuarios,DC=banco,DC=local
+LDAP_GROUP_ADMIN=CN=Monitoreo-Admins,OU=Grupos,DC=banco,DC=local
+LDAP_GROUP_VIEWER=CN=Funcionarios-Banco,OU=Grupos,DC=banco,DC=local
 ```
 
-Una vez consolidados ambos requerimientos, la instancia de Grafana debe ser reiniciada desde Docker para recargar la variante actualizada de `ldap.toml`. Finalizado el despliegue, las validaciones de inicio de sesión de todos los ingenieros o responsables de TI operarán de forma transparente contra el Active Directory central de la institución bancaria.
+---
+
+## 🔍 Verificación
+
+Si tienes problemas para iniciar sesión:
+1. Revisa los logs de Grafana: `docker compose logs grafana`.
+2. Verifica que el archivo se generó correctamente dentro del contenedor:
+   ```bash
+   docker compose exec grafana cat /etc/grafana/ldap.toml
+   ```
+
+---
+> **Seguridad**: El uso de plantillas evita que las rutas de tu Active Directory o las contraseñas de cuentas de servicio queden guardadas en los archivos de configuración estáticos del repositorio.

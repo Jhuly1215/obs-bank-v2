@@ -47,16 +47,16 @@ SELECT
     COUNT(1) AS TotalCount,
     ISNULL(AVG(DATEDIFF(second, fechaOperacion, GETDATE())), 0) AS AvgSec,
     ISNULL(MAX(DATEDIFF(second, fechaOperacion, GETDATE())), 0) AS MaxSec,
-    SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 300 THEN 1 ELSE 0 END) AS DeadCount
+    ISNULL(SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 300 THEN 1 ELSE 0 END), 0) AS DeadCount
 FROM Transferencia
 WHERE estado IN ({ReviewStates}) AND fechaOperacion IS NOT NULL";
 
     // 5) Aging granular (Solo Operativas + 100, excluye programadas)
     public const string IntraPendingAgingBucketCount = $@"
 SELECT estado, 
-       SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 14400 THEN 1 ELSE 0 END) AS Ge14400s,
-       SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 3600 THEN 1 ELSE 0 END) AS Ge3600s,
-       SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 900 THEN 1 ELSE 0 END) AS Ge900s
+        ISNULL(SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 14400 THEN 1 ELSE 0 END), 0) AS Ge14400s,
+       ISNULL(SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 3600 THEN 1 ELSE 0 END), 0) AS Ge3600s,
+       ISNULL(SUM(CASE WHEN DATEDIFF(second, fechaOperacion, GETDATE()) >= 900 THEN 1 ELSE 0 END), 0) AS Ge900s
 FROM Transferencia 
 WHERE estado IN ({OpPendingStates}, {ReviewStates}) AND fechaOperacion IS NOT NULL 
 GROUP BY estado";
@@ -64,9 +64,9 @@ GROUP BY estado";
     // 6) Fallas, Rechazos y Compensadas 24h (Estado 9 corregido)
     public const string IntraFailures24h = $@"
 SELECT
-   SUM(CASE WHEN estado IN ({RejectedStates}) THEN 1 ELSE 0 END) AS Rejected,
-   SUM(CASE WHEN estado IN ({TechFailedStates}) THEN 1 ELSE 0 END) AS FailedTechnical,
-   SUM(CASE WHEN estado IN ({CompensatedStates}) THEN 1 ELSE 0 END) AS Compensated
+   ISNULL(SUM(CASE WHEN estado IN ({RejectedStates}) THEN 1 ELSE 0 END), 0) AS Rejected,
+   ISNULL(SUM(CASE WHEN estado IN ({TechFailedStates}) THEN 1 ELSE 0 END), 0) AS FailedTechnical,
+   ISNULL(SUM(CASE WHEN estado IN ({CompensatedStates}) THEN 1 ELSE 0 END), 0) AS Compensated
 FROM Transferencia
 WHERE estado IN ({RejectedStates}, {TechFailedStates}, {CompensatedStates}) 
   AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
@@ -114,7 +114,7 @@ WITH SuccessBase AS (
       AND fechaModificacion IS NOT NULL
       AND fechaOperacion >= DATEADD(hour, -24, GETDATE())
 )
-SELECT ISNULL(PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY dur_s ASC), 0) FROM SuccessBase";
+SELECT TOP 1 ISNULL(PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY dur_s ASC) OVER(), 0) FROM SuccessBase";
 
     // Historical Volume (Tactical windows)
     public const string IntraTxCreated5m = "SELECT COUNT(1) FROM Transferencia WHERE fechaOperacion >= DATEADD(minute, -5, GETDATE())";

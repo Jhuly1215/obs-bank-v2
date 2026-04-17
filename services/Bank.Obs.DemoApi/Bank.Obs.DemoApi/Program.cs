@@ -18,16 +18,30 @@ using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- Logging (Serilog structured JSON) ---
+// --- 1. Metadatos de Observabilidad ---
+var meta = ServiceMetadata.FromConfiguration(builder.Configuration);
+
+// --- 2. Logging (Serilog structured JSON + OTLP) ---
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .Enrich.FromLogContext()
     .WriteTo.Console(new CompactJsonFormatter())
+    .WriteTo.OpenTelemetry(options =>
+    {
+        options.Endpoint = meta.OtlpEndpoint.ToString();
+        options.ResourceAttributes = new Dictionary<string, object>
+        {
+            ["service.name"] = meta.Name,
+            ["service_name"] = meta.Name, // Unificación de etiquetas
+            ["service.version"] = meta.Version
+        };
+    })
     .CreateLogger();
 
 builder.Host.UseSerilog();
 
-// --- Configuration ---
+// --- 3. Configuration ---
+// (Already has builder.Configuration.AddJsonFile...)
 builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                      .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
                      .AddEnvironmentVariables();
@@ -104,7 +118,6 @@ else
 }
 
 // --- HttpClient & Metadata ---
-var meta = ServiceMetadata.FromConfiguration(builder.Configuration);
 builder.Services.AddHttpClient();
 
 // --- Swagger ---

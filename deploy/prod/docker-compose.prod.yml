@@ -1,8 +1,24 @@
 services:
-  # =========================
-  # Colector OTLP
-  # 4317/4318 permanecen expuestos para recibir trazas de las APIs externas
-  # =========================
+  # --- INIT-CONFIG (Pre-procesador de plantillas en Producción) ---
+  config-init:
+    image: alpine:3.21
+    command: >
+      sh -c "apk add --no-cache gettext && 
+             envsubst < /tmp/templates/ldap.prod.toml.template > /etc/shared/ldap.toml"
+    environment:
+      - LDAP_SERVER_HOST=${LDAP_SERVER_HOST}
+      - LDAP_SERVER_PORT=${LDAP_SERVER_PORT}
+      - LDAP_USE_SSL=${LDAP_USE_SSL}
+      - LDAP_BIND_DN=${LDAP_BIND_DN}
+      - LDAP_BIND_PASSWORD=${LDAP_BIND_PASSWORD}
+      - LDAP_SEARCH_BASE=${LDAP_SEARCH_BASE}
+      - LDAP_ADMIN_GROUP=${LDAP_GROUP_ADMIN}
+      - LDAP_VIEWER_GROUP=${LDAP_GROUP_VIEWER}
+    volumes:
+      - ./deploy/prod/ldap.prod.toml.template:/tmp/templates/ldap.prod.toml.template:ro
+      - shared_config:/etc/shared
+    networks: [ obs ]
+
   otel-collector:
     ports:
       - "${OTLP_GRPC_PORT:-4317}:4317"
@@ -15,51 +31,41 @@ services:
     volumes:
       - prom_data_prod:/prometheus
 
-  # =========================
-  # MINIO S3 (ALMACENAMIENTO DE PRODUCCIÓN)
-  # =========================
   minio:
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
     command: server /data --console-address ":9001"
     restart: unless-stopped
-    env_file:
-      - ./deploy/prod/.env
     environment:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
     volumes:
       - minio_data_prod:/data
-    networks:
-      - obs
+    networks: [ obs ]
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
 
   minio-init:
     image: minio/mc:RELEASE.2025-01-17T23-25-50Z
-    depends_on:
-      - minio
-    networks:
-      - obs
-    env_file:
-      - ./deploy/prod/.env
+    depends_on: [ minio ]
+    networks: [ obs ]
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      MINIO_BUCKET_LOKI: "${MINIO_BUCKET_LOKI}"
+      MINIO_BUCKET_TEMPO: "${MINIO_BUCKET_TEMPO}"
     entrypoint: >
       /bin/sh -c " until /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do
         echo 'waiting for minio...'; sleep 2;
       done; /usr/bin/mc mb -p local/${MINIO_BUCKET_LOKI} || true; /usr/bin/mc mb -p local/${MINIO_BUCKET_TEMPO} || true; /usr/bin/mc anonymous set none local/${MINIO_BUCKET_LOKI} || true; /usr/bin/mc anonymous set none local/${MINIO_BUCKET_TEMPO} || true; echo 'minio buckets ready'; exit 0; "
     restart: "no"
 
-  # =========================
-  # LOKI (USANDO AWS S3 MINIO)
-  # =========================
   loki:
     ports: []
     restart: unless-stopped
     command:
       - -config.file=/etc/loki/config.yml
       - -config.expand-env=true
-    env_file:
-      - deploy/prod/.env
     environment:
       LOKI_S3_BUCKET: "${LOKI_S3_BUCKET}"
       LOKI_S3_ENDPOINT: "${LOKI_S3_ENDPOINT}"
@@ -70,17 +76,12 @@ services:
       - loki_data_prod:/loki
       - ./deploy/prod/config/loki.yml:/etc/loki/config.yml:ro
 
-  # =========================
-  # TEMPO (USANDO AWS S3 MINIO)
-  # =========================
   tempo:
     ports: []
     restart: unless-stopped
     command:
       - -config.file=/etc/tempo.yaml
       - -config.expand-env=true
-    env_file:
-      - deploy/prod/.env
     environment:
       TEMPO_S3_BUCKET: "${TEMPO_S3_BUCKET}"
       TEMPO_S3_ENDPOINT: "${TEMPO_S3_ENDPOINT}"
@@ -91,18 +92,21 @@ services:
       - tempo_data_prod:/var/tempo
       - ./deploy/prod/config/tempo.yml:/etc/tempo.yaml:ro
 
-  # =========================
-  # GRAFANA & AD
-  # =========================
   grafana:
-    ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+    ports: []
     restart: unless-stopped
-    env_file:
-      - deploy/prod/.env
+    environment:
+      GF_SERVER_DOMAIN: "${DOMAIN_NAME}"
+      GF_SERVER_ROOT_URL: "${GRAFANA_URL}"
+      GF_AUTH_LDAP_ENABLED: "true"
+      GF_AUTH_LDAP_CONFIG_FILE: "/etc/grafana/ldap.toml"
     volumes:
-      - ./deploy/prod/ldap.prod.toml:/etc/grafana/ldap.toml:ro
+      # Usamos el archivo generado por config-init en Prod también
+      - shared_config:/etc/grafana:ro
       - ./deploy/prod/config/grafana.ini:/etc/grafana/grafana.ini:ro
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
 
   alloy:
     ports: []
@@ -138,9 +142,23 @@ services:
     volumes:
       - redis_data_prod:/data
 
+  nginx:
+    image: nginx:1.27.4-stable-alpine
+    container_name: obs-bank-v2-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+    volumes:
+      - ./deploy/prod/config/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
+      - ./deploy/prod/certs:/etc/nginx/certs:ro
+    networks: [ obs ]
+    depends_on: [ grafana ]
+
   openldap:
-    profiles:
-      - disable
+    profiles: [ disable ]
 
 volumes:
   prom_data_prod:
@@ -149,3 +167,4 @@ volumes:
   alloy_data_prod:
   redis_data_prod:
   minio_data_prod:
+  shared_config: # Re-usamos el volumen de configuración compartida

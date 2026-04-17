@@ -17,8 +17,8 @@ Write-Host "
 ==================================================
   Observability Bank v2 (PROD - COMPACTED)
 ==================================================
-  S3 MinIO      -> http://localhost:9001
-  Grafana       -> http://localhost:3000
+  S3 MinIO      -> http://localhost:9001 (Consola)
+  Grafana (SSL) -> https://grafana.ecofuturo.com (vía Proxy 443)
   Demo API      -> Oculto en Prod (Sin puerto expuesto)
   FCM / SMTP    -> Configurado mediante .env
 ==================================================

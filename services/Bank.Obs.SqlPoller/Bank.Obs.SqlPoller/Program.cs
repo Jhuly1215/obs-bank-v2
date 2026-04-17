@@ -2,56 +2,43 @@ using Bank.Obs.SqlPoller.Metrics;
 using Bank.Obs.SqlPoller.Polling;
 using Bank.Obs.SqlPoller.State;
 using Bank.Obs.SqlPoller.Workers;
-using OpenTelemetry.Exporter;
-using OpenTelemetry.Logs;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
+using Bank.Obs.SqlPoller.Observability;
+using Serilog;
+using Serilog.Formatting.Compact;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"] ?? "http://otel-collector:4317";
-var serviceName = builder.Configuration["OpenTelemetry:ServiceName"] ?? "bank-sql-poller";
-var serviceVersion = builder.Configuration["OpenTelemetry:ServiceVersion"] ?? "2.0.0";
+// --- 1. Metadatos de Observabilidad ---
+var meta = ServiceMetadata.FromConfiguration(builder.Configuration);
 
-var resourceBuilder = ResourceBuilder.CreateDefault()
-    .AddService(serviceName: serviceName, serviceVersion: serviceVersion);
+// --- 2. Serilog (Logging Estructurado + OTLP) ---
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .Enrich.FromLogContext()
+    .WriteTo.Console(new CompactJsonFormatter())
+    .WriteTo.OpenTelemetry(options =>
+    {
+        options.Endpoint = meta.OtlpEndpoint.ToString();
+        options.ResourceAttributes = new Dictionary<string, object>
+        {
+            ["service.name"] = meta.Name,
+            ["service_name"] = meta.Name, // Unificación de etiquetas
+            ["service.version"] = meta.Version
+        };
+    })
+    .CreateLogger();
 
+builder.Services.AddSerilog();
+
+// --- 3. Observabilidad (Métricas & Trazas Nativa) ---
+builder.AddObservability(meta);
+
+// --- 3. Core Services ---
 builder.Services.AddSingleton<MetricState>();
 builder.Services.AddSingleton<SqlPollingClient>();
 builder.Services.AddSingleton<SqlMetrics>();
 builder.Services.AddHostedService<SqlMetricsWorker>();
 
-builder.Services.AddOpenTelemetry()
-    .ConfigureResource(r => r.AddService(serviceName, serviceVersion))
-    .WithMetrics(metrics =>
-    {
-        metrics
-            .AddMeter(SqlMetrics.MeterName)
-            .AddOtlpExporter(otlp =>
-            {
-                otlp.Endpoint = new Uri(otlpEndpoint);
-                otlp.Protocol = OtlpExportProtocol.Grpc;
-            });
-    });
-
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
-builder.Logging.AddOpenTelemetry(o =>
-{
-    o.SetResourceBuilder(resourceBuilder);
-
-    o.IncludeFormattedMessage = true;
-    o.ParseStateValues = true;
-    o.IncludeScopes = true;
-
-    // o.IncludeTraceId = true;
-    // o.IncludeSpanId = true;
-
-    o.AddOtlpExporter(otlp =>
-    {
-        otlp.Endpoint = new Uri(otlpEndpoint);
-        otlp.Protocol = OtlpExportProtocol.Grpc;
-    });
-});
-
-await builder.Build().RunAsync();
+// --- 4. Start ---
+var host = builder.Build();
+await host.RunAsync();

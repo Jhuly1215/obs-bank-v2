@@ -20,6 +20,7 @@
     <!-- Logging Estructurado con Serilog -->
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageReference Include="Serilog.Sinks.OpenTelemetry" Version="1.2.0" />
   </ItemGroup>
 
 </Project>

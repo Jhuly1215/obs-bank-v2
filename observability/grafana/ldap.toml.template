@@ -1,0 +1,28 @@
+[[servers]]
+# Configuración Dinámica inyectada desde el .env
+host = "${LDAP_SERVER_HOST}"
+port = ${LDAP_SERVER_PORT}
+use_ssl = ${LDAP_USE_SSL}
+
+bind_dn = "${LDAP_BIND_DN}"
+bind_password = "${LDAP_BIND_PASSWORD}"
+
+search_filter = "(uid=%s)"
+search_base_dns = ["${LDAP_SEARCH_BASE}"]
+
+[servers.attributes]
+name = "givenName"
+surname = "sn"
+username = "uid"
+member_of = "memberOf"
+email =  "mail"
+
+[[servers.group_mappings]]
+# Grupo Administradores
+group_dn = "${LDAP_GROUP_ADMIN}"
+org_role = "Admin"
+
+[[servers.group_mappings]]
+# Grupo Lectores
+group_dn = "${LDAP_GROUP_VIEWER}"
+org_role = "Viewer"

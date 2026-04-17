@@ -43,6 +43,7 @@ A diferencia de versiones anteriores, **ObsBank-v2** extrae toda su inteligencia
 - **`DOMAIN_NAME`**: Define la identidad del servidor para el Proxy SSL.
 - **`LDAP_BIND_DN` / `LDAP_SEARCH_BASE`**: Conecta Grafana con el Active Directory corporativo.
 - **`SQLSERVER_CONN`**: Cadena de conexión centralizada.
+- **`MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`**: Credenciales maestras del almacenamiento S3.
 
 ---
 

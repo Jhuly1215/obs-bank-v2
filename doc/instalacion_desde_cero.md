@@ -32,7 +32,7 @@ Todo el proyecto depende de su archivo maestro de configuración.
    > *Tip:* Si viene un archivo llamado `.env.example`, cópialo y renómbralo a `.env`.
 2. **Variables a revisar:**
    - Asegúrate de que `DOMAIN_NAME` sea el tuyo (ej. `localhost` para pruebas).
-   - Revisa la conexión de Base de Datos en `SQLSERVER_CONN`. El servidor local de tu máquina usualmente es `host.docker.internal,1433`.
+3. **MinIO (S3):** Si vas a usar Producción, define `MINIO_ROOT_USER` y `MINIO_ROOT_PASSWORD`. El stack se encargará de crear los buckets `loki` y `tempo` automáticamente.
 
 ---
 

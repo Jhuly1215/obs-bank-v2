@@ -17,9 +17,9 @@ Write-Host "
 ==================================================
   Observability Bank v2 (PROD - COMPACTED)
 ==================================================
-  S3 MinIO      -> http://localhost:9001 (Consola)
-  Grafana (SSL) -> https://grafana.ecofuturo.com (vía Proxy 443)
+  S3 MinIO (UI) -> http://localhost:9001
+  Grafana (SSL) -> https://$((Get-Content deploy/prod/.env | Select-String 'DOMAIN_NAME=').ToString().Split('=')[1])
   Demo API      -> Oculto en Prod (Sin puerto expuesto)
   FCM / SMTP    -> Configurado mediante .env
 ==================================================
-NOTA: Asegurate de usar docker compose down cuando termines." -ForegroundColor Cyan
+NOTA: El puerto de MinIO Console es configurable en el .env." -ForegroundColor Cyan

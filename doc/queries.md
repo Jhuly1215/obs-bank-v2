@@ -1,91 +1,100 @@
 # Consultas y Métricas de Observabilidad (sql-poller)
 
-El servicio `Bank.Obs.SqlPoller` ejecuta un ciclo continuo (cada 1 minuto) sobre la base de datos transaccional (`EconetTransacciones` de SQL Server) para recolectar métricas de salud operativa en tiempo real: volumen, estado de retención y fallos.
+El servicio `Bank.Obs.SqlPoller` ejecuta un ciclo continuo sobre la base de datos transaccional (`EconetTransacciones`) para recolectar métricas de salud operativa en tiempo real. 
 
-Toda la instrumentación se realiza nativamente con **OpenTelemetry en .NET 9**. Las consultas emiten hechos absolutos (Base Metrics) sin realizar agrupaciones analíticas pesadas. La analítica compleja, cálculos de ratios del negocio y el procesamiento de alertas se delegan a PromQL y a Grafana.
-
----
-
-## 1. Volumen Transaccional (TX Creadas)
-Mide la cantidad neta de operaciones que entraron al sistema para ser transferidas (tanto las que tuvieron éxito como la que fallaron).
-
-**Tablas fuente:** `Transferencia` (internas) y `TransferenciaInterbancaria` (interbancarias ACH).
-
-| Ventana | Descripción | Métrica OTel (Gauge) | Etiqueta `source` |
-|---------|-------------|----------------------|-------------------|
-| Últimos 15 min | Operaciones recientes para monitoreo de actividad vivo ultrarrápida. | `tx_created_total_15m` | `intra` / `inter` |
-| Últimas 24h | Operaciones diarias (fundamental para promedios baselines y alarmas de volúmenes). | `tx_created_total_24h` | `intra` / `inter` |
-| Últimos 7d | Volumen total operado en la última ventana semanal corrida. | `tx_created_total_7d` | `intra` / `inter` |
-| Últimos 30d | Operaciones mensuales para analíticas de rendimiento. | `tx_created_total_30d` | `intra` / `inter` |
-
-*Ejemplo Query SQL Base:* 
-```sql
-SELECT COUNT(1) FROM Transferencia 
-WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE())
-```
+Toda la instrumentación se realiza con **OpenTelemetry**. Las métricas se emiten como **Gauges** decorados con etiquetas contextuales (`source`, `estado`, `tipo`, `bucket`, `banco`, `moneda`), permitiendo un análisis multidimensional en Grafana sin sobrecargar la base de datos con agrupaciones complejas en cada consulta.
 
 ---
 
-## 2. Transacciones Pendientes (Backlog Estancado)
-Monitoriza las transacciones que fueron creadas pero que el motor bancario todavía **no ha dictaminado con éxito ni cerrado en un estado final de falla**. 
+## 1. Volumen y Actividad (Tactical & Strategic)
+Mide el flujo de entrada de transacciones en diferentes ventanas temporales.
 
-**Estados contemplados (Intra & Inter):** `0, 1, 6, 7, 17, 100` (Creado, En proceso, Pendiente Confirmación, etc.).
+| Ventana | Métrica OTel (Gauge) | Descripción |
+|---------|----------------------|-------------|
+| **5 min** | `tx_created_total_5m` | **(Nuevo)** Monitoreo de actividad ultra-reciente / "Liveness". |
+| **15 min** | `tx_created_total_15m` | Ritmo de entrada a corto plazo. |
+| **1 hora** | `tx_created_total_1h` | **(Nuevo)** Volumen táctico por hora. |
+| **24 horas** | `tx_created_total_24h` | Volumen diario (línea base principal). |
+| **7 / 30 días**| `tx_created_total_7d` / `tx_created_total_30d` | Tendencias históricas y estacionalidad. |
+
+### Volumen por Atributos (Tabular)
+| Indicador | Métrica OTel (Gauge) | Etiquetas |
+|-----------|----------------------|-----------|
+| Distribución por Estado | `tx_state_count_24h` | `source`, `estado` |
+| Volumen por Tipo | `tx_type_count_24h` | `source`, `tipo` |
+| Volumen por Banco (ACH) | `tx_interbank_bank_count_24h` | `banco` |
+
+---
+
+## 2. Gestión de Backlog (Salud del Procesamiento)
+Detecta transacciones estancadas en estados intermedios (`0, 1, 6, 7, 17, 100`).
 
 | Indicador | Métrica OTel (Gauge) | Descripción |
 |-----------|----------------------|-------------|
-| Estancadas 24h | `tx_pending_count_24h` | Cantidad total de transacciones sin liquidar originadas el último día. |
-| Estancadas 7d | `tx_pending_count_7d`  | Total de retención extendida, útil para evidenciar colapso asíncrono residual. |
-| Antigüedad | `tx_pending_oldest_seconds` | La edad (en segundos) de la transacción estancada **más vieja**. Es crítico para configurar las alertas SLA de retenciones, si pasa de 300 segundos disparamos notificación de Backlog crítico. |
+| **Backlog Total** | `tx_pending_current_total` | **(Nuevo)** Cantidad absoluta de transacciones vivas en el sistema. |
+| **Backlog Reciente**| `tx_pending_recent_1h` | **(Nuevo)** Transacciones creadas en la última hora que siguen pendientes. |
+| **Antigüedad Máxima**| `tx_pending_oldest_seconds` | Edad en segundos de la transacción más antigua. |
+| **Edad Promedio** | `tx_pending_avg_age_seconds` | Promedio de edad agrupado por `estado`. |
+| **Edad Máxima** | `tx_pending_max_age_seconds` | Máxima edad detectada agrupada por `estado`. |
 
-*Ejemplo Query SQL (Envejecimiento):* 
-```sql
-SELECT ISNULL(DATEDIFF(second, MIN(fechaOperacion), GETDATE()), 0) 
-FROM TransferenciaInterbancaria 
-WHERE estado IN (0,1,6,7,17,100)
-```
+### Backlog Aging (Buckets)
+Permite visualizar la distribución de la "deuda técnica" del procesamiento:
+- **Métrica:** `tx_pending_aging_bucket_count`
+- **Etiquetas:** `bucket` (`ge_900s`, `ge_3600s`, `ge_14400s`), `estado`, `source`.
 
 ---
 
-## 3. Degradación y Errores Técnicos
-Cuantifica de forma estricta los fallos técnicos terminales o rechazos comerciales bloqueantes de la jornada operativa en curso.
-
-**Estados de error:** `2, 4, 5, 15` (Rechazos formales, Fallos de Red, Timed Out).
+## 3. Rendimiento y SLAs (Performance)
+Mide la velocidad con la que el sistema resuelve las transacciones exitosas (desde `fechaOperacion` a `fechaModificacion`).
 
 | Indicador | Métrica OTel (Gauge) | Descripción |
 |-----------|----------------------|-------------|
-| Fallos Diarios | `tx_error_count_24h` | Total acumulado de transferencias finalizadas en estado de error explícito (últimas 24h). |
-
-> **Transición de Arquitectura (Nube a PromQL):** A diferencia de arquitecturas previas monolíticas, el código del `sql-poller` en .NET ya no calcula el "Error Rate" internamente (eso consumía recursos en la DB para dividir fracciones). Ahora exporta los crudos, y esa conversión métrica se hace evaluando en Grafana con PromQL de la siguiente forma:
-> `sum(tx_error_count_24h) / sum(tx_created_total_24h) * 100`
-
----
-
-## 4. Ritmo de Resoluciones y Cierres (Throughput Speed)
-Analiza la velocidad general en la que el sistema resuelve y asienta de baja los flujos, demostrando que tan despejada se encuentra nuestra cola ACH o Core.
-
-**Estados resueltos:** `3, 8, 9` (Liquidado con confirmación, Extornado explícitamente, Finalización con Excepción catalogada).
-
-| Indicador | Métrica OTel (Gauge) | Descripción |
-|-----------|----------------------|-------------|
-| Cantidad Resuelta | `tx_resolved_count_24h` | Total absoluto de transacciones cerradas de la máquina del estado. |
-| Rapidez Resolutiva | `tx_resolution_avg_seconds` | Promedio en segundos de la diferencia temporal detectada entre `fechaOperacion` nativa y la `fechaModificacion` final de resolución en la tabla. |
-
-*Ejemplo Query SQL (Tiempo de Cierre Avg):* 
-```sql
-SELECT ISNULL(AVG(DATEDIFF(second, fechaOperacion, ISNULL(fechaModificacion, GETDATE()))), 0) 
-FROM Transferencia WHERE estado IN (3,8,9) AND fechaOperacion >= DATEADD(hour, -24, GETDATE())
-```
+| **Latencia P95** | `tx_success_p95_seconds` | El 95% de las TX se resuelven en este tiempo o menos. |
+| **Latencia P99** | `tx_success_p99_seconds` | **(Nuevo)** Medición de valores atípicos (Outliers) extremos. |
+| **Latencia Promedio**| `tx_success_avg_seconds` | Promedio general de resolución. |
 
 ---
 
-## 5. Métricas de Salud Operativa (Observabilidad del Propio Poller)
-Métricas internas exclusivas sobre el mismo servicio de telemetría de Ecofuturo `Bank.Obs.SqlPoller`. 
+## 4. Analítica de Negocio (Importes)
+Monitoreo financiero del volumen transado.
 
-| Tipo de Métrica | Nombre Exposición OTel | Descripción de Vida |
-|-----------------|------------------------|---------------------|
-| **Gauge** | `sql_poller_last_success_timestamp` | Timestamp *UnixEpoch* nativo del último acceso que resolvió todo el macro-ciclo de Data Readers exitosamente. Dispara un alerta de Poller Muerto si su antiguedad sobrepasa los 5 minutos. |
-| **Gauge** | `sql_poller_consecutive_failures` | Contador punitivo que se eleva ante timeout de SQL / DB Offline. Cae a `0` apenas el servicio restaura conexión real. |
-| **Histogram (ms)**| `sql_poller_cycle_duration_seconds` | Latencia. Segundos completos empleados en mandar las sentencias SQL y obtener los resultados en memoria RAM (mide la degradación de recursos). |
-| **Counter (inc)** | `sql_poller_errors_total` | Monotónico incremental puro para análisis de paradas a largo plazo. |
+| Indicador | Métrica OTel (Gauge) | Etiquetas |
+|-----------|----------------------|-----------|
+| **Total Hora** | `tx_amount_total_1h` | `source` |
+| **Total Diario**| `tx_amount_total_24h`| `source`, `moneda` |
+| **Desagregado** | `tx_amount_by_type_24h`| `source`, `tipo`, `moneda` |
+| **Por Banco** | `tx_interbank_bank_amount_total_24h`| `banco`, `moneda` |
 
-> **Desagregación:** Nota que todas las métricas de negocio exportadas via OpenTelemetry están "decoradas" dinámicamente con la metadata contextual: el pair `source="intra"` e intermitentemente `source="inter"`, lo que permite multiplexar los gráficos de Grafana de un solo golpe.
+---
+
+## 5. Detección de Anomalías e Integridad
+Métricas diseñadas para detectar fallos silenciosos o inconsistencias en los datos.
+
+| Métrica OTel (Gauge) | Descripción | Escenario de Alerta |
+|----------------------|-------------|---------------------|
+| `tx_anomaly_zero_duration_count_24h` | **(Nuevo)** TX marcadas como exitosas con 0 segundos de duración. | Indica procesos que podrían estar saltándose validaciones o fallos de auditoría. |
+| `tx_anomaly_missing_mod_count_24h` | **(Nuevo)** TX cerradas sin fecha de modificación. | Error de integridad en el Motor de Base de Datos. |
+| `sql_poller_consecutive_failures` | Fallos de conexión del propio servicio. | Interrupción de la visibilidad (Servicio Muerto). |
+
+---
+
+## 6. Errores y Degradación
+Cuantificación de fallos técnicos y rechazos.
+
+| Indicador | Métrica | Etiquetas |
+|-----------|---------|-----------|
+| **Rechazos** | `tx_rejected_count_24h` | `source` |
+| **Fallos Técnicos** | `tx_failed_technical_count_24h` | `source` |
+
+> [!TIP]
+> **Error Rate Dinámico:** No se calcula en la base de datos. Se calcula en Grafana usando:
+> `(sum(tx_failed_technical_count_24h) / sum(tx_created_total_24h)) * 100`
+
+---
+
+## Glosario de Etiquetas Contextuales
+- `source`: `intra` (Transferencias Internas) o `inter` (ACH/Interbancarias).
+- `estado`: ID numérico del estado en la base de datos (Ej: 3=Éxito, 1=Pendiente).
+- `tipo`: Tipo de transacción (Ej: 1=Normal, 2=Programada).
+- `banco`: ID del banco destino (Solo para `inter`).
+- `moneda`: ID de la moneda (0=BOB, 1=USD).

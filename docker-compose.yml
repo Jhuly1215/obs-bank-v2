@@ -1,91 +1,162 @@
 name: obs-bank-v2
 
+# --- PLANTILLA DE OBSERVABILIDAD ZERO-CODE ---
+x-otel-base: &otel-base
+  environment:
+    - CORECLR_ENABLE_PROFILING=1
+    - CORECLR_PROFILER={ff15165d-5152-4531-90f6-bc61ef90a334}
+    - CORECLR_PROFILER_PATH=/otel-auto/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
+    - DOTNET_STARTUP_HOOKS=/otel-auto/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll
+    - OTEL_DOTNET_AUTO_HOME=/otel-auto
+    - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_AGENT_ENDPOINT}
+    - OTEL_LOGS_EXPORTER=${OTEL_AGENT_LOGS_EXPORT}
+    - OTEL_METRICS_EXPORTER=${OTEL_AGENT_METRICS_EXPORT}
+    - OTEL_TRACES_EXPORTER=${OTEL_AGENT_TRACES_EXPORT}
+    - OTEL_DOTNET_AUTO_LOGS_INCLUDE_FORMATTED_MESSAGE=true
+  volumes:
+    - otel_binaries:/otel-auto:ro
+  networks:
+    - obs
+  depends_on:
+    - otel-agent-provider
+    - otel-collector
+
 services:
+  otel-agent-provider:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-dotnet:${OTEL_AGENT_VERSION}
+    container_name: otel-agent-provider
+    command: cp -a /autoinstrumentation/. /instrumentation/
+    volumes:
+      - otel_binaries:/instrumentation
+
   # =========================
   # CORE OBSERVABILIDAD
   # =========================
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.111.0
+    image: otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION}
     command: [ "--config=/etc/otelcol/config.yml" ]
+    environment:
+      LOKI_URL: "${LOKI_URL}"
+      TEMPO_URL: "${TEMPO_URL}"
     volumes:
       - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro
     ports:
-      - "4317:4317" # OTLP gRPC
-      - "4318:4318" # OTLP HTTP
+      - "4317:4317"
+      - "4318:4318"
     networks: [ obs ]
 
   prometheus:
-    image: prom/prometheus:v2.54.1
+    image: prom/prometheus:${PROMETHEUS_VERSION}
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-remote-write-receiver"
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prom_data:/prometheus
     networks: [ obs ]
 
   loki:
-    image: grafana/loki:3.1.1
-    command: -config.file=/etc/loki/config.yml
+    image: grafana/loki:${LOKI_VERSION}
+    command: 
+      - -config.file=/etc/loki/config.yml
+      - -config.expand-env=true
     volumes:
       - ./observability/loki-config.yml:/etc/loki/config.yml:ro
       - loki_data:/loki
     networks: [ obs ]
 
   tempo:
-    image: grafana/tempo:2.10.0
-    command: [ "-config.file=/etc/tempo.yaml" ]
+    image: grafana/tempo:${TEMPO_VERSION}
+    command: 
+      - -config.file=/etc/tempo.yaml
+      - -config.expand-env=true
+    environment:
+      PROMETHEUS_URL: "${PROMETHEUS_URL}"
+      TEMPO_HTTP_LISTEN_PORT: "${TEMPO_HTTP_LISTEN_PORT}"
+      TEMPO_GRPC_LISTEN_PORT: "${TEMPO_GRPC_LISTEN_PORT}"
+      TEMPO_HTTP_RECEIVER_PORT: "${TEMPO_HTTP_RECEIVER_PORT}"
+      TEMPO_FRONTEND_PORT: "${TEMPO_FRONTEND_PORT}"
     volumes:
       - ./observability/tempo.yml:/etc/tempo.yaml:ro
       - tempo_data:/var/tempo
     networks: [ obs ]
 
+  # --- INIT-CONFIG (Pre-procesador de plantillas) ---
+  config-init:
+    image: alpine:3.21
+    command: >
+      sh -c "apk add --no-cache gettext && 
+             envsubst < /tmp/templates/ldap.toml.template > /etc/shared/ldap.toml"
+    environment:
+      - LDAP_SERVER_HOST=${LDAP_SERVER_HOST}
+      - LDAP_SERVER_PORT=${LDAP_SERVER_PORT}
+      - LDAP_USE_SSL=${LDAP_USE_SSL}
+      - LDAP_BIND_DN=${LDAP_BIND_DN}
+      - LDAP_BIND_PASSWORD=${LDAP_BIND_PASSWORD}
+      - LDAP_SEARCH_BASE=${LDAP_SEARCH_BASE}
+      - LDAP_GROUP_ADMIN=${LDAP_GROUP_ADMIN}
+      - LDAP_GROUP_VIEWER=${LDAP_GROUP_VIEWER}
+    volumes:
+      - ./observability/grafana/ldap.toml.template:/tmp/templates/ldap.toml.template:ro
+      - shared_config:/etc/shared
+    networks: [ obs ]
+
   grafana:
-    image: grafana/grafana:11.1.4
+    image: grafana/grafana:${GRAFANA_VERSION}
     container_name: grafana
     restart: unless-stopped
-
     environment:
+      # Grafana expande variables en grafana.ini automáticamente
+      GF_SERVER_DOMAIN: "${DOMAIN_NAME}"
+      GF_SERVER_ROOT_URL: "${GRAFANA_URL}"
       GF_SECURITY_ADMIN_USER: "${GF_SECURITY_ADMIN_USER}"
       GF_SECURITY_ADMIN_PASSWORD: "${GF_SECURITY_ADMIN_PASSWORD}"
-
-      # === SMTP (EMAIL ALERTS) ===
+      PROMETHEUS_URL: "${PROMETHEUS_URL}"
+      LOKI_URL: "${LOKI_URL}"
+      TEMPO_URL: "${TEMPO_URL}"
+      # SMTP
       GF_SMTP_ENABLED: "true"
       GF_SMTP_HOST: "${GF_SMTP_HOST}"
       GF_SMTP_USER: "${GF_SMTP_USER}"
       GF_SMTP_PASSWORD: "${GF_SMTP_PASSWORD}"
       GF_SMTP_FROM_ADDRESS: "${GF_SMTP_FROM_ADDRESS}"
       GF_SMTP_FROM_NAME: "${GF_SMTP_FROM_NAME}"
-      GF_SMTP_SKIP_VERIFY: "false"
-      GF_SMTP_STARTTLS_POLICY: "MandatoryStartTLS"
-
-      # === LDAP AUTHENTICATION ===
+      # LDAP
       GF_AUTH_LDAP_ENABLED: "true"
       GF_AUTH_LDAP_CONFIG_FILE: "/etc/grafana/ldap.toml"
       GF_AUTH_LDAP_ALLOW_SIGN_UP: "true"
     volumes:
       - ./observability/grafana/data:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      #LDAP
       - ./observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
-      - ./observability/grafana/ldap.toml:/etc/grafana/ldap.toml:ro
+      # Montamos el archivo generado por config-init
+      - shared_config:/etc/grafana:ro
       - ./observability/certs/ca-banco.pem:/etc/ssl/certs/ca-banco.pem:ro
-
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     depends_on:
-      - prometheus
-      - loki
-      - tempo
+      config-init:
+        condition: service_completed_successfully
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
     networks: [ obs ]
 
-  # =========================
-  # INGESTA LOGS (TXT/JSON)
-  # =========================
   alloy:
-    image: grafana/alloy:v1.13.0
+    image: grafana/alloy:${ALLOY_VERSION}
     command:
       - run
       - --server.http.listen-addr=0.0.0.0:12345
       - --storage.path=/var/lib/alloy/data
       - /etc/alloy/config.alloy
+    environment:
+      LOKI_URL: "${LOKI_URL}"
     volumes:
       - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - ./sample-logs:/var/log/bank-apis:ro
@@ -94,80 +165,70 @@ services:
       - loki
     networks: [ obs ]
 
-  # =========================
-  # API DEMO .NET 9 (OTEL)
-  # =========================
   demo-api:
     build:
       context: ./services/Bank.Obs.DemoApi/Bank.Obs.DemoApi
       dockerfile: Dockerfile
     environment:
       ASPNETCORE_URLS: http://+:8080
-      ASPNETCORE_ENVIRONMENT: Development
-      SQLSERVER_CONN: ${SQLSERVER_CONN}
-      OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT}"
+      SQLSERVER_CONN: "${SQLSERVER_CONN}"
+      OpenTelemetry__OtlpEndpoint: "${OTEL_COLLECTOR_URL}"
       OpenTelemetry__ServiceName: bank-obs-demo-api
-      OpenTelemetry__ServiceVersion: 2.0.0
+      OpenTelemetry__ServiceVersion: "${DEMO_API_VERSION}"
     ports:
-      - "5000:8080"
+      - "${DEMO_API_PORT:-5000}:8080"
     depends_on:
       - otel-collector
     networks: [ obs ]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  # =========================
-  # SQL POLLER .NET 9 (MÉTRICAS DESDE SQL SERVER)
-  # =========================
   sql-poller:
     build:
       context: ./services/Bank.Obs.SqlPoller/Bank.Obs.SqlPoller
       dockerfile: Dockerfile
     environment:
-      SqlPoller__ConnectionString: ${SQLSERVER_CONN}
-      SqlPoller__IntervalSeconds: 60
-      OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
+      SqlPoller__ConnectionString: "${SQLSERVER_CONN}"
+      SqlPoller__IntervalSeconds: "${SQL_POLLER_INTERVAL}"
+      OpenTelemetry__OtlpEndpoint: "${OTEL_COLLECTOR_URL}"
       OpenTelemetry__ServiceName: bank-sql-poller
-      OpenTelemetry__ServiceVersion: 2.0.0
+      OpenTelemetry__ServiceVersion: "${SQL_POLLER_VERSION}"
     depends_on:
       - otel-collector
     networks: [ obs ]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:${REDIS_VERSION}
     command: [ "redis-server", "--appendonly", "yes" ]
     volumes:
       - redis_data:/data
     networks: [ obs ]
     restart: unless-stopped
 
-  # =========================
-  # Grafana FCM Bridge (Alertas a Android Push)
-  # =========================
   fcm-bridge:
     build:
       context: ./services/Bank.Obs.FcmBridge/Bank.Obs.FcmBridge
       dockerfile: Dockerfile
     environment:
-      # Debe montarse en este path dentro del container
       GOOGLE_APPLICATION_CREDENTIALS: /etc/secrets/firebase-service-account.json
-      # Pasamos el bearer token de autenticación
-      BRIDGE_API_KEY: ${BRIDGE_API_KEY:-dev_key_super_secret_123}
+      BRIDGE_API_KEY: "${BRIDGE_API_KEY}"
     volumes:
-      # Montamos el service-account desde observability/certs (se asume que el user lo pegará allí)
       - ./observability/certs/firebase-service-account.json:/etc/secrets/firebase-service-account.json:ro
     networks: [ obs ]
     restart: unless-stopped
 
-  # =========================
-  # MOCK LDAP OPENLDAP SERVER
-  # =========================
   openldap:
-    image: rroemhild/test-openldap
+    image: osixia/openldap:${OPENLDAP_VERSION}
     container_name: obs-bank-v2-ldap-1
     ports:
-      - "389:389"
+      - "${LDAP_PORT:-389}:389"
     environment:
-      - LDAP_DOMAIN=planetexpress.com
+      - LDAP_DOMAIN=${LDAP_DOMAIN:-planetexpress.com}
+      - LDAP_ADMIN_PASSWORD=${LDAP_BIND_PASSWORD:-GoodNewsEveryone}
     networks: [ obs ]
 
 networks:
@@ -180,3 +241,5 @@ volumes:
   tempo_data:
   alloy_data:
   redis_data:
+  otel_binaries:
+  shared_config:

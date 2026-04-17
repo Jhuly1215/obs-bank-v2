@@ -85,3 +85,21 @@ deploy/prod/.env
 *.sqlite
 *.mdf
 *.ldf
+
+############################
+# ?? Observability Data/State
+############################
+
+# Grafana local data & plugins
+/observability/grafana/data/
+
+# Prometheus/Loki/Tempo data if they were bind mounted (currently volumes, but good to have)
+**/data/prom/
+**/data/loki/
+**/data/tempo/
+**/data/alloy/
+
+# Temporary logs and telemetry
+/sample-logs/
+temp.log
+*.log

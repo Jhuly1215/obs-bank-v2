@@ -1,0 +1,30 @@
+[[servers]]
+# Endpoint corporativo Active Directory de Ecofuturo
+host = "${LDAP_SERVER_HOST}"
+port = ${LDAP_SERVER_PORT}
+use_ssl = ${LDAP_USE_SSL}
+
+# Credenciales de la Cuenta de Servicio (Bind)
+bind_dn = "${LDAP_BIND_DN}"
+bind_password = "${LDAP_BIND_PASSWORD}"
+
+# Ruteo y Búsqueda
+search_filter = "(sAMAccountName=%s)"
+search_base_dns = ["${LDAP_SEARCH_BASE}"]
+
+[servers.attributes]
+name = "givenName"
+surname = "sn"
+username = "sAMAccountName"
+member_of = "memberOf"
+email =  "mail"
+
+[[servers.group_mappings]]
+# Mapeo Rol Administrador
+group_dn = "${LDAP_ADMIN_GROUP}"
+org_role = "Admin"
+
+[[servers.group_mappings]]
+# Mapeo Rol Visor
+group_dn = "${LDAP_VIEWER_GROUP}"
+org_role = "Viewer"

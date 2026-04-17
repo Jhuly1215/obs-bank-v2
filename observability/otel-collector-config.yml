@@ -16,13 +16,12 @@ processors:
     limit_mib: 1024
     spike_limit_mib: 256
 
-  # Añade el atributo service.name como label en Loki
-  # Los logs de "Econet-Transacciones-API" y "bank-sql-poller" quedan separados en Grafana
+  # Estandarizado: service_name es la etiqueta principal para filtrar en Grafana
   resource/loki_labels:
     attributes:
       - action: insert
         key: loki.resource.labels
-        value: service.name, service.version
+        value: service.name, service_name, service.version
 
 exporters:
   prometheus:
@@ -30,12 +29,10 @@ exporters:
     resource_to_telemetry_conversion:
       enabled: true
 
-  loki:
-    endpoint: "http://loki:3100/loki/api/v1/push"
-    default_labels_enabled:
-      exporter: false   # Evita label ruidoso
-      job: true
-      level: true       # Nivel de log (info/warn/error) disponible en Loki
+  otlphttp/loki:
+    endpoint: "${LOKI_URL}/otlp"
+    tls:
+      insecure: true
 
   otlp/tempo:
     endpoint: "tempo:4317"
@@ -62,4 +59,4 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, resource/loki_labels, batch]
-      exporters: [loki]
+      exporters: [otlphttp/loki]

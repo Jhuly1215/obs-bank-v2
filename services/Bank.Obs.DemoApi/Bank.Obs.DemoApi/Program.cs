@@ -1,4 +1,4 @@
-﻿using Bank.Obs.DemoApi.Auth;
+using Bank.Obs.DemoApi.Auth;
 using Bank.Obs.DemoApi.Endpoints;
 using Bank.Obs.DemoApi.Middleware;
 using Bank.Obs.DemoApi.Observability;
@@ -14,19 +14,34 @@ using System.Threading.RateLimiting;
 using StackExchange.Redis;
 using Microsoft.EntityFrameworkCore;
 using Bank.Obs.DemoApi.Data;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- Logging (Serilog structured JSON) ---
+// --- 1. Metadatos de Observabilidad ---
+var meta = ServiceMetadata.FromConfiguration(builder.Configuration);
+
+// --- 2. Logging (Serilog structured JSON + OTLP) ---
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .Enrich.FromLogContext()
     .WriteTo.Console(new CompactJsonFormatter())
+    .WriteTo.OpenTelemetry(options =>
+    {
+        options.Endpoint = meta.OtlpEndpoint.ToString();
+        options.ResourceAttributes = new Dictionary<string, object>
+        {
+            ["service.name"] = meta.Name,
+            ["service_name"] = meta.Name, // Unificación de etiquetas
+            ["service.version"] = meta.Version
+        };
+    })
     .CreateLogger();
 
 builder.Host.UseSerilog();
 
-// --- Configuration ---
+// --- 3. Configuration ---
+// (Already has builder.Configuration.AddJsonFile...)
 builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                      .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
                      .AddEnvironmentVariables();
@@ -103,7 +118,6 @@ else
 }
 
 // --- HttpClient & Metadata ---
-var meta = ServiceMetadata.FromConfiguration(builder.Configuration);
 builder.Services.AddHttpClient();
 
 // --- Swagger ---
@@ -113,28 +127,21 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "Bank Obs Demo API", Version = "v1" });
 
     // Para Development: permitir meter Authorization header desde Swagger UI
-    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer",
         BearerFormat = "JWT",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        In = ParameterLocation.Header,
         Description = "Dev: escribe 'Dev test' o 'Bearer <token>'"
     });
 
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
         {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
+            new OpenApiSecuritySchemeReference("Bearer", document),
+            []
         }
     });
 });

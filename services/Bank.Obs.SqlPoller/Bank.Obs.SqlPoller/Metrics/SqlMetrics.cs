@@ -55,14 +55,11 @@ public sealed class SqlMetrics : System.IDisposable
             MapStates(_state.Current?.IntraStateCount24h, _state.Current?.InterStateCount24h), description: "Distribución por estado");
             
         _meter.CreateObservableGauge("tx_pending_current_count", () => 
-            MapStates(_state.Current?.IntraPendingCurrent, _state.Current?.InterPendingCurrent), description: "Backlog actual por estado");
+            MapStates(_state.Current?.IntraOpPending, _state.Current?.InterOpPending), description: "Backlog actual (Para compatibilidad dashboard)");
             
         _meter.CreateObservableGauge("tx_pending_aging_bucket_count", CreateAgingBuckets, description: "Aging limits por bucket");
         
-        _meter.CreateObservableGauge("tx_pending_avg_age_seconds", () => 
-            MapAgeStat(_state.Current?.IntraAgeStats, _state.Current?.InterAgeStats, true), description: "Promedio edad por estado");
-        _meter.CreateObservableGauge("tx_pending_max_age_seconds", () => 
-            MapAgeStat(_state.Current?.IntraAgeStats, _state.Current?.InterAgeStats, false), description: "Max edad por estado");
+        // Note: Avg/Max Age stats are now handled via ReviewStats for the critical path
 
         _meter.CreateObservableGauge("tx_rejected_count_24h", () => 
             MapFailures(_state.Current?.IntraFailures, _state.Current?.InterFailures, true), description: "Rechazos totales");
@@ -83,59 +80,145 @@ public sealed class SqlMetrics : System.IDisposable
         _meter.CreateObservableGauge("tx_success_p95_seconds", () => 
             MapSpeedStat(_state.Current?.IntraSuccessSpeed, _state.Current?.InterSuccessSpeed, false), description: "P95 speed proxy");
 
+        // =========================
+        // New Taxonomy & Critical Metrics
+        // =========================
+        _meter.CreateObservableGauge("tx_op_pending_count", () => 
+            MapStates(_state.Current?.IntraOpPending, _state.Current?.InterOpPending), description: "Backlog operativo real (1,6)");
+            
+        _meter.CreateObservableGauge("tx_programmed_count", () => 
+            MapStates(_state.Current?.IntraProgrammed, _state.Current?.InterProgrammed), description: "Backlog programado (0,7,17)");
+
+        _meter.CreateObservableGauge("tx_review_count", CreateReviewCount, description: "Conteo en estado 100");
+        _meter.CreateObservableGauge("tx_review_avg_age_seconds", CreateReviewAvg, unit: "s", description: "Promedio edad estado 100");
+        _meter.CreateObservableGauge("tx_review_max_age_seconds", CreateReviewMax, unit: "s", description: "Max edad estado 100");
+        _meter.CreateObservableGauge("tx_review_dead_count", CreateReviewDead, description: "Estado 100 estancado > 300s");
+
+        _meter.CreateObservableGauge("tx_compensated_count_24h", CreateCompensatedCount, description: "TX Compensadas/Despignoradas (9)");
+
+        // =========================
+        // High Resolution & Anomalies (Optimized)
+        // =========================
+        _meter.CreateObservableGauge("tx_created_total_5m", CreateVolObs5m, description: "TX Creadas 5m");
+        _meter.CreateObservableGauge("tx_created_total_1h", CreateVolObs1h, description: "TX Creadas 1h");
+        _meter.CreateObservableGauge("tx_amount_total_1h", CreateAmount1h, unit: "$", description: "Total transado 1h");
+        
+        _meter.CreateObservableGauge("tx_success_p99_seconds", CreateSpeedP99, unit: "s", description: "P99 speed proxy 24h");
+        _meter.CreateObservableGauge("tx_anomaly_zero_duration_count_24h", CreateZeroDur, description: "TX resueltas en 0s (posible inconsistencia)");
+        _meter.CreateObservableGauge("tx_anomaly_missing_mod_count_24h", CreateMissingMod, description: "TX resueltas sin fecha de modificacion");
+
         // Destination Bank specifics
         _meter.CreateObservableGauge("tx_interbank_bank_count_24h", CreateBankCount, description: "Volumen 24h por banco");
         _meter.CreateObservableGauge("tx_interbank_bank_state_count_24h", CreateBankStateCount, description: "Estado 24h por banco");
         _meter.CreateObservableGauge("tx_interbank_bank_amount_total_24h", CreateBankAmount, description: "Importes 24h por banco");
+
+        // =========================
+        // Health & Infrastructure
+        // =========================
+        _meter.CreateObservableGauge("sql_server_sessions_count", CreateSessionMetrics, description: "Sesiones activas agrupadas por estado y espera");
+        _meter.CreateObservableGauge("sql_server_io_stall_seconds", CreateIoMetrics, unit: "s", description: "Latencia acumulada de E/S por archivo (I/O Stall)");
+        _meter.CreateObservableGauge("sql_server_io_bytes_total", CreateIoBytesMetrics, unit: "By", description: "Bytes leidos/escritos acumulados por archivo");
+        _meter.CreateObservableGauge("sql_database_size_mb", CreateDatabaseSizeMetrics, unit: "MB", description: "Tamaño y uso de archivos de base de datos");
+        
+        // =========================
+        // Data Quality Anomalies (Granular)
+        // =========================
+        _meter.CreateObservableGauge("tx_quality_anomaly_count", CreateAnomalyMetrics, description: "Anomalías de calidad de datos detectadas");
     }
 
     // --- Legacy / Base Creators ---
     private IEnumerable<Measurement<int>> CreateVolObs() => SafeGen(s => new[] {
-        new Measurement<int>(s.IntraTxCreated15m, new KeyValuePair<string, object?>("source", "intra")),
-        new Measurement<int>(s.InterTxCreated15m, new KeyValuePair<string, object?>("source", "inter"))});
+        new Measurement<int>(s.IntraTxCreated15m, Tags(s, "intra")),
+        new Measurement<int>(s.InterTxCreated15m, Tags(s, "inter"))});
 
     private IEnumerable<Measurement<int>> CreateVolObs24() => SafeGen(s => new[] {
-        new Measurement<int>(s.IntraTxCreated24h, new KeyValuePair<string, object?>("source", "intra")),
-        new Measurement<int>(s.InterTxCreated24h, new KeyValuePair<string, object?>("source", "inter"))});
+        new Measurement<int>(s.IntraTxCreated24h, Tags(s, "intra")),
+        new Measurement<int>(s.InterTxCreated24h, Tags(s, "inter"))});
 
     private IEnumerable<Measurement<int>> CreateVolObs7() => SafeGen(s => new[] {
-        new Measurement<int>(s.IntraTxCreated7d, new KeyValuePair<string, object?>("source", "intra")),
-        new Measurement<int>(s.InterTxCreated7d, new KeyValuePair<string, object?>("source", "inter"))});
+        new Measurement<int>(s.IntraTxCreated7d, Tags(s, "intra")),
+        new Measurement<int>(s.InterTxCreated7d, Tags(s, "inter"))});
 
     private IEnumerable<Measurement<int>> CreateVolObs30() => SafeGen(s => new[] {
-        new Measurement<int>(s.IntraTxCreated30d, new KeyValuePair<string, object?>("source", "intra")),
-        new Measurement<int>(s.InterTxCreated30d, new KeyValuePair<string, object?>("source", "inter"))});
+        new Measurement<int>(s.IntraTxCreated30d, Tags(s, "intra")),
+        new Measurement<int>(s.InterTxCreated30d, Tags(s, "inter"))});
 
     private IEnumerable<Measurement<int>> CreatePend24() => SafeGen(s => new[] {
-        new Measurement<int>(s.IntraPendingCount24h, new KeyValuePair<string, object?>("source", "intra")),
-        new Measurement<int>(s.InterPendingCount24h, new KeyValuePair<string, object?>("source", "inter"))});
+        new Measurement<int>(s.IntraPendingCount24h, Tags(s, "intra")),
+        new Measurement<int>(s.InterPendingCount24h, Tags(s, "inter"))});
 
     private IEnumerable<Measurement<int>> CreatePend7() => SafeGen(s => new[] {
-        new Measurement<int>(s.IntraPendingCount7d, new KeyValuePair<string, object?>("source", "intra")),
-        new Measurement<int>(s.InterPendingCount7d, new KeyValuePair<string, object?>("source", "inter"))});
+        new Measurement<int>(s.IntraPendingCount7d, Tags(s, "intra")),
+        new Measurement<int>(s.InterPendingCount7d, Tags(s, "inter"))});
 
     private IEnumerable<Measurement<int>> CreatePendOldest() => SafeGen(s => new[] {
-        new Measurement<int>(s.IntraPendingOldestSec, new KeyValuePair<string, object?>("source", "intra")),
-        new Measurement<int>(s.InterPendingOldestSec, new KeyValuePair<string, object?>("source", "inter"))});
+        new Measurement<int>(s.IntraPendingOldestSec, Tags(s, "intra")),
+        new Measurement<int>(s.InterPendingOldestSec, Tags(s, "inter"))});
 
     private IEnumerable<Measurement<int>> CreateErr24() => SafeGen(s => new[] {
-        new Measurement<int>(s.IntraErrorCount24h, new KeyValuePair<string, object?>("source", "intra")),
-        new Measurement<int>(s.InterErrorCount24h, new KeyValuePair<string, object?>("source", "inter"))});
+        new Measurement<int>(s.IntraErrorCount24h, Tags(s, "intra")),
+        new Measurement<int>(s.InterErrorCount24h, Tags(s, "inter"))});
 
     private IEnumerable<Measurement<int>> CreateRes24() => SafeGen(s => new[] {
-        new Measurement<int>(s.IntraResolvedCount24h, new KeyValuePair<string, object?>("source", "intra")),
-        new Measurement<int>(s.InterResolvedCount24h, new KeyValuePair<string, object?>("source", "inter"))});
+        new Measurement<int>(s.IntraResolvedCount24h, Tags(s, "intra")),
+        new Measurement<int>(s.InterResolvedCount24h, Tags(s, "inter"))});
 
     private IEnumerable<Measurement<int>> CreateResAvg() => SafeGen(s => new[] {
-        new Measurement<int>(s.IntraResAvgSec, new KeyValuePair<string, object?>("source", "intra")),
-        new Measurement<int>(s.InterResAvgSec, new KeyValuePair<string, object?>("source", "inter"))});
+        new Measurement<int>(s.IntraResAvgSec, Tags(s, "intra")),
+        new Measurement<int>(s.InterResAvgSec, Tags(s, "inter"))});
+
+    // --- New High-Res & Anomaly Creators ---
+    private IEnumerable<Measurement<int>> CreateVolObs5m() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraTxCreated5m, Tags(s, "intra")),
+        new Measurement<int>(s.InterTxCreated5m, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateVolObs1h() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraTxCreated1h, Tags(s, "intra")),
+        new Measurement<int>(s.InterTxCreated1h, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<double>> CreateAmount1h() => SnapshotSafeGen(s => new[] {
+        new Measurement<double>(s.IntraAmountTotal1h, Tags(s, "intra")),
+        new Measurement<double>(s.InterAmountTotal1h, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateSpeedP99() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraSuccessSpeedP99, Tags(s, "intra")),
+        new Measurement<int>(s.InterSuccessSpeedP99, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateReviewCount() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraReview?.TotalCount ?? 0, Tags(s, "intra")),
+        new Measurement<int>(s.InterReview?.TotalCount ?? 0, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateReviewAvg() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraReview?.AvgSec ?? 0, Tags(s, "intra")),
+        new Measurement<int>(s.InterReview?.AvgSec ?? 0, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateReviewMax() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraReview?.MaxSec ?? 0, Tags(s, "intra")),
+        new Measurement<int>(s.InterReview?.MaxSec ?? 0, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateReviewDead() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraReview?.DeadCount ?? 0, Tags(s, "intra")),
+        new Measurement<int>(s.InterReview?.DeadCount ?? 0, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateCompensatedCount() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraFailures?.Compensated ?? 0, Tags(s, "intra")),
+        new Measurement<int>(s.InterFailures?.Compensated ?? 0, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateZeroDur() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraZeroDurationCount, Tags(s, "intra")),
+        new Measurement<int>(s.InterZeroDurationCount, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateMissingMod() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraMissingModCount, Tags(s, "intra")),
+        new Measurement<int>(s.InterMissingModCount, Tags(s, "inter"))});
 
     // --- Tabular Mapping ---
     
     private IEnumerable<Measurement<int>> MapStates(IReadOnlyList<SqlPollingClient.StateCountRow> intra, IReadOnlyList<SqlPollingClient.StateCountRow> inter)
     {
-        if (intra != null) foreach(var x in intra) yield return new Measurement<int>(x.Count, Kvp("source", "intra"), Kvp("estado", x.Estado.ToString()));
-        if (inter != null) foreach(var x in inter) yield return new Measurement<int>(x.Count, Kvp("source", "inter"), Kvp("estado", x.Estado.ToString()));
+        var s = _state.Current;
+        if (intra != null) foreach(var x in intra) yield return new Measurement<int>(x.Count, Tags(s, "intra", "estado", x.Estado.ToString()));
+        if (inter != null) foreach(var x in inter) yield return new Measurement<int>(x.Count, Tags(s, "inter", "estado", x.Estado.ToString()));
     }
 
     private IEnumerable<Measurement<int>> CreateAgingBuckets()
@@ -145,71 +228,112 @@ public sealed class SqlMetrics : System.IDisposable
 
         if (s.IntraPendingBucket != null) foreach(var x in s.IntraPendingBucket)
         {
-            if (x.Ge14400s > 0) yield return new(x.Ge14400s, Kvp("source", "intra"), Kvp("estado", x.Estado.ToString()), Kvp("bucket", "ge_14400s"));
-            if (x.Ge3600s > 0) yield return new(x.Ge3600s, Kvp("source", "intra"), Kvp("estado", x.Estado.ToString()), Kvp("bucket", "ge_3600s"));
-            if (x.Ge900s > 0) yield return new(x.Ge900s, Kvp("source", "intra"), Kvp("estado", x.Estado.ToString()), Kvp("bucket", "ge_900s"));
+            if (x.Ge14400s > 0) yield return new(x.Ge14400s, Tags(s, "intra", "estado", x.Estado.ToString(), "bucket", "ge_14400s"));
+            if (x.Ge3600s > 0) yield return new(x.Ge3600s, Tags(s, "intra", "estado", x.Estado.ToString(), "bucket", "ge_3600s"));
+            if (x.Ge900s > 0) yield return new(x.Ge900s, Tags(s, "intra", "estado", x.Estado.ToString(), "bucket", "ge_900s"));
         }
         if (s.InterPendingBucket != null) foreach(var x in s.InterPendingBucket)
         {
-            if (x.Ge14400s > 0) yield return new(x.Ge14400s, Kvp("source", "inter"), Kvp("estado", x.Estado.ToString()), Kvp("bucket", "ge_14400s"));
-            if (x.Ge3600s > 0) yield return new(x.Ge3600s, Kvp("source", "inter"), Kvp("estado", x.Estado.ToString()), Kvp("bucket", "ge_3600s"));
-            if (x.Ge900s > 0) yield return new(x.Ge900s, Kvp("source", "inter"), Kvp("estado", x.Estado.ToString()), Kvp("bucket", "ge_900s"));
+            if (x.Ge14400s > 0) yield return new(x.Ge14400s, Tags(s, "inter", "estado", x.Estado.ToString(), "bucket", "ge_14400s"));
+            if (x.Ge3600s > 0) yield return new(x.Ge3600s, Tags(s, "inter", "estado", x.Estado.ToString(), "bucket", "ge_3600s"));
+            if (x.Ge900s > 0) yield return new(x.Ge900s, Tags(s, "inter", "estado", x.Estado.ToString(), "bucket", "ge_900s"));
         }
     }
 
     private IEnumerable<Measurement<int>> MapAgeStat(IReadOnlyList<SqlPollingClient.AgeStatsRow> intra, IReadOnlyList<SqlPollingClient.AgeStatsRow> inter, bool avg)
     {
-        if (intra != null) foreach(var x in intra) yield return new Measurement<int>(avg ? x.AvgSec : x.MaxSec, Kvp("source", "intra"), Kvp("estado", x.Estado.ToString()));
-        if (inter != null) foreach(var x in inter) yield return new Measurement<int>(avg ? x.AvgSec : x.MaxSec, Kvp("source", "inter"), Kvp("estado", x.Estado.ToString()));
+        var s = _state.Current;
+        if (intra != null) foreach(var x in intra) yield return new Measurement<int>(avg ? x.AvgSec : x.MaxSec, Tags(s, "intra", "estado", x.Estado.ToString()));
+        if (inter != null) foreach(var x in inter) yield return new Measurement<int>(avg ? x.AvgSec : x.MaxSec, Tags(s, "inter", "estado", x.Estado.ToString()));
     }
 
     private IEnumerable<Measurement<int>> MapFailures(SqlPollingClient.FailuresRow intra, SqlPollingClient.FailuresRow inter, bool rejected)
     {
-        if (intra != null) yield return new Measurement<int>(rejected ? intra.Rejected : intra.FailedTechnical, Kvp("source", "intra"));
-        if (inter != null) yield return new Measurement<int>(rejected ? inter.Rejected : inter.FailedTechnical, Kvp("source", "inter"));
+        var s = _state.Current;
+        if (intra != null) yield return new Measurement<int>(rejected ? intra.Rejected : intra.FailedTechnical, Tags(s, "intra"));
+        if (inter != null) yield return new Measurement<int>(rejected ? inter.Rejected : inter.FailedTechnical, Tags(s, "inter"));
     }
 
     private IEnumerable<Measurement<int>> MapTypeCount(IReadOnlyList<SqlPollingClient.TypeCountRow> intra, IReadOnlyList<SqlPollingClient.TypeCountRow> inter)
     {
-        if (intra != null) foreach(var x in intra) yield return new(x.Count, Kvp("source", "intra"), Kvp("tipo", x.Tipo.ToString()));
-        if (inter != null) foreach(var x in inter) yield return new(x.Count, Kvp("source", "inter"), Kvp("tipo", x.Tipo.ToString()));
+        var s = _state.Current;
+        if (intra != null) foreach(var x in intra) yield return new(x.Count, Tags(s, "intra", "tipo", x.Tipo.ToString()));
+        if (inter != null) foreach(var x in inter) yield return new(x.Count, Tags(s, "inter", "tipo", x.Tipo.ToString()));
     }
 
     private IEnumerable<Measurement<double>> MapAmountTotal(IReadOnlyList<SqlPollingClient.AmountTotalRow> intra, IReadOnlyList<SqlPollingClient.AmountTotalRow> inter)
     {
-        if (intra != null) foreach(var x in intra) yield return new(x.Total, Kvp("source", "intra"), Kvp("moneda", x.Moneda.ToString()));
-        if (inter != null) foreach(var x in inter) yield return new(x.Total, Kvp("source", "inter"), Kvp("moneda", x.Moneda.ToString()));
+        var s = _state.Current;
+        if (intra != null) foreach(var x in intra) yield return new(x.Total, Tags(s, "intra", "moneda", x.Moneda.ToString()));
+        if (inter != null) foreach(var x in inter) yield return new(x.Total, Tags(s, "inter", "moneda", x.Moneda.ToString()));
     }
 
     private IEnumerable<Measurement<double>> MapAmountByType(IReadOnlyList<SqlPollingClient.AmountByTypeRow> intra, IReadOnlyList<SqlPollingClient.AmountByTypeRow> inter)
     {
-        if (intra != null) foreach(var x in intra) yield return new(x.Total, Kvp("source", "intra"), Kvp("tipo", x.Tipo.ToString()), Kvp("moneda", x.Moneda.ToString()));
-        if (inter != null) foreach(var x in inter) yield return new(x.Total, Kvp("source", "inter"), Kvp("tipo", x.Tipo.ToString()), Kvp("moneda", x.Moneda.ToString()));
+        var s = _state.Current;
+        if (intra != null) foreach(var x in intra) yield return new(x.Total, Tags(s, "intra", "tipo", x.Tipo.ToString(), "moneda", x.Moneda.ToString()));
+        if (inter != null) foreach(var x in inter) yield return new(x.Total, Tags(s, "inter", "tipo", x.Tipo.ToString(), "moneda", x.Moneda.ToString()));
     }
 
     private IEnumerable<Measurement<int>> MapSpeedStat(IReadOnlyList<SqlPollingClient.SpeedStatsRow> intra, IReadOnlyList<SqlPollingClient.SpeedStatsRow> inter, bool avg)
     {
-        if (intra != null) foreach(var x in intra) yield return new Measurement<int>(avg ? x.AvgSec : x.P95Sec, Kvp("source", "intra"), Kvp("tipo", x.Tipo.ToString()));
-        if (inter != null) foreach(var x in inter) yield return new Measurement<int>(avg ? x.AvgSec : x.P95Sec, Kvp("source", "inter"), Kvp("tipo", x.Tipo.ToString()));
+        var s = _state.Current;
+        if (intra != null) foreach(var x in intra) yield return new Measurement<int>(avg ? x.AvgSec : x.P95Sec, Tags(s, "intra", "tipo", x.Tipo.ToString()));
+        if (inter != null) foreach(var x in inter) yield return new Measurement<int>(avg ? x.AvgSec : x.P95Sec, Tags(s, "inter", "tipo", x.Tipo.ToString()));
     }
 
     private IEnumerable<Measurement<int>> CreateBankCount()
     {
-        var src = _state.Current?.InterBankCount;
-        if (src != null) foreach(var x in src) yield return new(x.Count, Kvp("banco", x.Banco.ToString()));
+        var s = _state.Current;
+        if (s?.InterBankCount != null) foreach(var x in s.InterBankCount) yield return new(x.Count, Tags(s, "inter", "banco", x.Banco.ToString()));
     }
 
     private IEnumerable<Measurement<int>> CreateBankStateCount()
     {
-        var src = _state.Current?.InterBankStateCount;
-        if (src != null) foreach(var x in src) yield return new(x.Count, Kvp("banco", x.Banco.ToString()), Kvp("estado", x.Estado.ToString()));
+        var s = _state.Current;
+        if (s?.InterBankStateCount != null) foreach(var x in s.InterBankStateCount) yield return new(x.Count, Tags(s, "inter", "banco", x.Banco.ToString(), "estado", x.Estado.ToString()));
     }
 
     private IEnumerable<Measurement<double>> CreateBankAmount()
     {
-        var src = _state.Current?.InterBankAmountTotal;
-        if (src != null) foreach(var x in src) yield return new(x.Total, Kvp("banco", x.Banco.ToString()), Kvp("moneda", x.Moneda.ToString()));
+        var s = _state.Current;
+        if (s?.InterBankAmountTotal != null) foreach(var x in s.InterBankAmountTotal) yield return new(x.Total, Tags(s, "inter", "banco", x.Banco.ToString(), "moneda", x.Moneda.ToString()));
     }
+
+    // --- Health & Quality Creators ---
+
+    private IEnumerable<Measurement<int>> CreateSessionMetrics() => SafeGen(s => 
+        s.ServerSessions?.Select(x => new Measurement<int>(x.Count, Tags(s, null, "status", x.Status, "wait_type", x.WaitType))) 
+        ?? Enumerable.Empty<Measurement<int>>());
+
+    private IEnumerable<Measurement<double>> CreateIoMetrics() => SnapshotSafeGen(s => 
+        s.FileIoStats?.SelectMany(x => new[] {
+            new Measurement<double>(x.ReadStallMs / 1000.0, Tags(s, null, "file_id", x.FileId.ToString(), "io_type", "read")),
+            new Measurement<double>(x.WriteStallMs / 1000.0, Tags(s, null, "file_id", x.FileId.ToString(), "io_type", "write"))
+        }) ?? Enumerable.Empty<Measurement<double>>());
+
+    private IEnumerable<Measurement<long>> CreateIoBytesMetrics()
+    {
+        var s = _state.Current;
+        if (s?.FileIoStats == null) return Enumerable.Empty<Measurement<long>>();
+        return s.FileIoStats.SelectMany(x => new[] {
+            new Measurement<long>(x.BytesRead, Tags(s, null, "file_id", x.FileId.ToString(), "io_type", "read")),
+            new Measurement<long>(x.BytesWritten, Tags(s, null, "file_id", x.FileId.ToString(), "io_type", "write"))
+        });
+    }
+
+    private IEnumerable<Measurement<int>> CreateDatabaseSizeMetrics() => SafeGen(s => 
+        s.DatabaseSizes?.SelectMany(x => new[] {
+            new Measurement<int>(x.SizeMB, Tags(s, null, "file_name", x.FileName, "stat", "total")),
+            new Measurement<int>(x.UsedMB, Tags(s, null, "file_name", x.FileName, "stat", "used"))
+        }) ?? Enumerable.Empty<Measurement<int>>());
+
+    private IEnumerable<Measurement<int>> CreateAnomalyMetrics() => SafeGen(s => 
+        s.QualityAnomalies?.SelectMany(x => new[] {
+            new Measurement<int>(x.MissingMod, Tags(s, x.Source, "tipo", x.Tipo.ToString(), "estado", x.Estado.ToString(), "anomaly", "missing_mod")),
+            new Measurement<int>(x.ZeroDur, Tags(s, x.Source, "tipo", x.Tipo.ToString(), "estado", x.Estado.ToString(), "anomaly", "zero_duration")),
+            new Measurement<int>(x.NegDur, Tags(s, x.Source, "tipo", x.Tipo.ToString(), "estado", x.Estado.ToString(), "anomaly", "negative_duration"))
+        }) ?? Enumerable.Empty<Measurement<int>>());
 
 
     // Helpers
@@ -218,8 +342,23 @@ public sealed class SqlMetrics : System.IDisposable
         var snapshot = _state.Current;
         return snapshot == null ? Enumerable.Empty<Measurement<int>>() : generator(snapshot);
     }
+
+    private IEnumerable<Measurement<double>> SnapshotSafeGen(System.Func<SqlPollingClient.Snapshot, IEnumerable<Measurement<double>>> generator)
+    {
+        var snapshot = _state.Current;
+        return snapshot == null ? Enumerable.Empty<Measurement<double>>() : generator(snapshot);
+    }
     
-    private KeyValuePair<string, object?> Kvp(string k, string v) => new KeyValuePair<string, object?>(k, v);
+    private KeyValuePair<string, object?>[] Tags(SqlPollingClient.Snapshot? s, string? source = null, string? k1 = null, string? v1 = null, string? k2 = null, string? v2 = null, string? k3 = null, string? v3 = null)
+    {
+        var list = new List<KeyValuePair<string, object?>>();
+        if (s != null) list.Add(new("tipo_dia", s.DayType));
+        if (source != null) list.Add(new("source", source));
+        if (k1 != null) list.Add(new(k1, v1));
+        if (k2 != null) list.Add(new(k2, v2));
+        if (k3 != null) list.Add(new(k3, v3));
+        return list.ToArray();
+    }
 
     public void RecordPollSuccess(double durationSeconds)
     {

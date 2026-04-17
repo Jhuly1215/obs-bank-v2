@@ -47,6 +47,12 @@ services:
 
   prometheus:
     image: prom/prometheus:${PROMETHEUS_VERSION}
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-remote-write-receiver"
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prom_data:/prometheus
@@ -67,6 +73,12 @@ services:
     command: 
       - -config.file=/etc/tempo.yaml
       - -config.expand-env=true
+    environment:
+      PROMETHEUS_URL: "${PROMETHEUS_URL}"
+      TEMPO_HTTP_LISTEN_PORT: "${TEMPO_HTTP_LISTEN_PORT}"
+      TEMPO_GRPC_LISTEN_PORT: "${TEMPO_GRPC_LISTEN_PORT}"
+      TEMPO_HTTP_RECEIVER_PORT: "${TEMPO_HTTP_RECEIVER_PORT}"
+      TEMPO_FRONTEND_PORT: "${TEMPO_FRONTEND_PORT}"
     volumes:
       - ./observability/tempo.yml:/etc/tempo.yaml:ro
       - tempo_data:/var/tempo

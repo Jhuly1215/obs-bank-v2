@@ -6,21 +6,35 @@ Esta guía resume la configuración necesaria para desplegar la API en un servid
 
 ## 1. Requisitos Previos: Open Telemetry
 
-### Comandos de Instalación:
-
+### Opción A: Comandos PowerShell (Recomendado)
 ```powershell
-# 1. Descargar el módulo de instalación
->> $module_url = "https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/latest/download/OpenTelemetry.DotNet.Auto.psm1"
->> $download_path = Join-Path $env:temp "OpenTelemetry.DotNet.Auto.psm1"
->> Invoke-WebRequest -Uri $module_url -OutFile $download_path -UseBasicParsing
->> 
->> # 2. Importar e instalar el Core (por defecto en Program Files)
->> Import-Module $download_path
->> Install-OpenTelemetryCore
->> 
->> # 3. Registrar el agente para IIS (esto reiniciará IIS automáticamente)
->> Register-OpenTelemetryForIIS
->>
+# 1. Definir ruta de instalación (EVITA el directorio raíz C:\)
+$install_path = "C:\Users\$env:USERNAME\otel-agent"
+
+# 2. Descargar el módulo de instalación
+$module_url = "https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/latest/download/OpenTelemetry.DotNet.Auto.psm1"
+$download_path = Join-Path $env:temp "OpenTelemetry.DotNet.Auto.psm1"
+Invoke-WebRequest -Uri $module_url -OutFile $download_path -UseBasicParsing
+
+# 3. Importar e instalar en la ruta elegida
+Import-Module $download_path
+Install-OpenTelemetryCore -InstallDirectory $install_path
+
+# 4. Registrar el agente para IIS
+Register-OpenTelemetryForIIS
+```
+
+### Opción B: Comandos CMD (Alternativa)
+Si no puedes usar PowerShell directamente, ejecuta estos comandos en una terminal con permisos de Administrador:
+```cmd
+:: 1. Descargar el script de instalación (usando curl, incluido en Windows 10/11)
+curl -L -o %TEMP%\OpenTelemetry.DotNet.Auto.psm1 https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/latest/download/OpenTelemetry.DotNet.Auto.psm1
+
+:: 2. Instalar el agente en una carpeta de usuario (ejemplo: %USERPROFILE%\otel-agent)
+powershell -Command "Import-Module %TEMP%\OpenTelemetry.DotNet.Auto.psm1; Install-OpenTelemetryCore -InstallDirectory %USERPROFILE%\otel-agent"
+
+:: 3. Registrar para IIS
+powershell -Command "Import-Module %TEMP%\OpenTelemetry.DotNet.Auto.psm1; Register-OpenTelemetryForIIS"
 ```
 ---
 
@@ -49,6 +63,7 @@ El archivo debe estar ubicado en la raíz de la aplicación desplegada (`web.con
           <environmentVariable name="OTEL_EXPORTER_OTLP_PROTOCOL" value="grpc" />
           <environmentVariable name="OTEL_SERVICE_NAME" value="econet-transactions-api-https" />
           <environmentVariable name="OTEL_RESOURCE_ATTRIBUTES" value="deployment.environment=development,service.namespace=econet" />
+          <environmentVariable name="OTEL_DOTNET_AUTO_LOG_DIRECTORY" value=".\logs\otel-agent" />
           
           <!-- 3. Entorno y HTTPS (Puerto 8443) -->
           <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Development" />
@@ -76,11 +91,6 @@ iisreset
 # O reiniciar solo el sitio específico (Recomendado)
 Restart-WebAppPool -Name "Econet.Transactions.Api"
 ```
-
-### Verificación de HTTPS
-1. Abrir navegador en: `https://localhost:8443/swagger/index.html` (o el nombre del host configurado).
-2. Verificar que las peticiones se realicen por **HTTPS** en la sección "Try it out" de Swagger.
-
 ---
 
 ## 4. Notas de Seguridad

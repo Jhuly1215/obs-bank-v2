@@ -92,7 +92,7 @@ deploy/prod/.env
 
 # Grafana local data & plugins
 /observability/grafana/data/
-
+/data
 # Prometheus/Loki/Tempo data if they were bind mounted (currently volumes, but good to have)
 **/data/prom/
 **/data/loki/

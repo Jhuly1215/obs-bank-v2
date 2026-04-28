@@ -1,0 +1,29 @@
+[[servers]]
+host = "openldap"
+port = 389
+use_ssl = false
+start_tls = false
+ssl_skip_verify = false
+timeout = 10
+
+bind_dn = "cn=admin,dc=planetexpress,dc=com"
+bind_password = "GoodNewsEveryone"
+
+search_filter = "(uid=%s)"
+search_base_dns = ["ou=people,dc=planetexpress,dc=com"]
+
+[servers.attributes]
+name = "givenName"
+surname = "sn"
+username = "uid"
+email = "mail"
+member_of = "memberOf"
+
+[[servers.group_mappings]]
+group_dn = "cn=admin_staff,ou=people,dc=planetexpress,dc=com"
+org_role = "Admin"
+grafana_admin = true
+
+[[servers.group_mappings]]
+group_dn = "cn=ship_crew,ou=people,dc=planetexpress,dc=com"
+org_role = "Viewer"

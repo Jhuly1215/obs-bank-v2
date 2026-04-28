@@ -156,4 +156,51 @@ WHERE estado IN ({SuccessStates})
   AND fechaModificacion IS NULL
   AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
 
+    public const string IntraSuccessCount24h = $@"
+SELECT COUNT(1)
+FROM Transferencia
+WHERE estado IN ({SuccessStates})
+  AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+
+    public const string IntraPendingAgeStats = $@"
+SELECT
+    estado,
+    ISNULL(AVG(DATEDIFF(second, fechaOperacion, GETDATE())), 0) AS AvgSec,
+    ISNULL(MAX(DATEDIFF(second, fechaOperacion, GETDATE())), 0) AS MaxSec
+FROM Transferencia
+WHERE estado IN ({OpPendingStates}, {ReviewStates})
+  AND fechaOperacion IS NOT NULL
+GROUP BY estado";
+
+    public const string IntraAmountTotal24h = @"
+SELECT
+    ISNULL(CAST(codigoMoneda AS INT), 0) AS Moneda,
+    ISNULL(SUM(monto), 0) AS Total
+FROM Transferencia
+WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE())
+GROUP BY codigoMoneda";
+
+    public const string IntraAmountTotal1h = @"
+SELECT ISNULL(SUM(monto), 0)
+FROM Transferencia
+WHERE fechaOperacion >= DATEADD(hour, -1, GETDATE())";
+
+    public const string IntraClosedCount24h = $@"
+SELECT COUNT(1)
+FROM Transferencia
+WHERE estado IN ({SuccessStates}, {CompensatedStates}, {RejectedStates}, {TechFailedStates})
+  AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+
+    public const string IntraOtherStateCount24h = $@"
+SELECT COUNT(1)
+FROM Transferencia
+WHERE estado NOT IN ({ProgrammedStates}, {OpPendingStates}, {ReviewStates}, {RejectedStates}, {TechFailedStates}, {CompensatedStates}, {SuccessStates})
+  AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+
+    public const string IntraCompensatedCurrentCount = $@"
+SELECT COUNT(1)
+FROM Transferencia
+WHERE estado IN ({CompensatedStates})
+  AND fechaOperacion IS NOT NULL";
+
 }

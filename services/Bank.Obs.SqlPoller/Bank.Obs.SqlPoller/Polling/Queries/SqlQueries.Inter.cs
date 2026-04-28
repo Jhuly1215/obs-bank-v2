@@ -166,4 +166,52 @@ SELECT COUNT(1) FROM TransferenciaInterbancaria
 WHERE estado IN ({SuccessStates}) 
   AND fechaModificacion IS NULL
   AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+
+    public const string InterSuccessCount24h = $@"
+SELECT COUNT(1)
+FROM TransferenciaInterbancaria
+WHERE estado IN ({SuccessStates})
+  AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+
+    public const string InterPendingAgeStats = $@"
+SELECT
+    estado,
+    ISNULL(AVG(DATEDIFF(second, fechaOperacion, GETDATE())), 0) AS AvgSec,
+    ISNULL(MAX(DATEDIFF(second, fechaOperacion, GETDATE())), 0) AS MaxSec
+FROM TransferenciaInterbancaria
+WHERE estado IN ({OpPendingStates}, {ReviewStates})
+  AND fechaOperacion IS NOT NULL
+GROUP BY estado";
+
+    public const string InterAmountTotal24h = @"
+SELECT
+    ISNULL(CAST(monedaOperacion AS INT), 0) AS Moneda,
+    ISNULL(SUM(monto), 0) AS Total
+FROM TransferenciaInterbancaria
+WHERE fechaOperacion >= DATEADD(hour, -24, GETDATE())
+GROUP BY monedaOperacion";
+
+    public const string InterAmountTotal1h = @"
+SELECT ISNULL(SUM(monto), 0)
+FROM TransferenciaInterbancaria
+WHERE fechaOperacion >= DATEADD(hour, -1, GETDATE())";
+
+    public const string InterClosedCount24h = $@"
+SELECT COUNT(1)
+FROM TransferenciaInterbancaria
+WHERE estado IN ({SuccessStates}, {CompensatedStates}, {RejectedStates}, {TechFailedStates})
+  AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+
+    public const string InterOtherStateCount24h = $@"
+SELECT COUNT(1)
+FROM TransferenciaInterbancaria
+WHERE estado NOT IN ({ProgrammedStates}, {OpPendingStates}, {ReviewStates}, {RejectedStates}, {TechFailedStates}, {CompensatedStates}, {SuccessStates})
+  AND fechaOperacion >= DATEADD(hour, -24, GETDATE())";
+
+    public const string InterCompensatedCurrentCount = $@"
+SELECT COUNT(1)
+FROM TransferenciaInterbancaria
+WHERE estado IN ({CompensatedStates})
+  AND fechaOperacion IS NOT NULL";
+
 }

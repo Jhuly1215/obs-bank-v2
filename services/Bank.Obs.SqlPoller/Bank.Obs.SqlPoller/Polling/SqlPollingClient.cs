@@ -118,10 +118,30 @@ public sealed class SqlPollingClient
             r => new BankAmountRow(GetInt(r, 0), GetInt(r, 1), GetDouble(r, 2)), ct);
 
         // 10) High Res & Anomalies
+        var intraSuccessCount24h = await ScalarIntAsync(conn, SqlQueries.IntraSuccessCount24h, ct);
+        var interSuccessCount24h = await ScalarIntAsync(conn, SqlQueries.InterSuccessCount24h, ct);
+        
+        var intraPendingAgeStats = await QueryListAsync(conn, SqlQueries.IntraPendingAgeStats, 
+            r => new AgeStatsRow(GetInt(r, 0), GetInt(r, 1), GetInt(r, 2)), ct);
+        var interPendingAgeStats = await QueryListAsync(conn, SqlQueries.InterPendingAgeStats, 
+            r => new AgeStatsRow(GetInt(r, 0), GetInt(r, 1), GetInt(r, 2)), ct);
+
+        var intraAmountTotal = await QueryListAsync(conn, SqlQueries.IntraAmountTotal24h, 
+            r => new AmountTotalRow(GetInt(r, 0), GetDouble(r, 1)), ct);
+        var interAmountTotal = await QueryListAsync(conn, SqlQueries.InterAmountTotal24h, 
+            r => new AmountTotalRow(GetInt(r, 0), GetDouble(r, 1)), ct);
+
         var intraTxCreated5m = await ScalarIntAsync(conn, SqlQueries.IntraTxCreated5m, ct);
         var interTxCreated5m = await ScalarIntAsync(conn, SqlQueries.InterTxCreated5m, ct);
         var intraTxCreated1h = await ScalarIntAsync(conn, SqlQueries.IntraTxCreated1h, ct);
         var interTxCreated1h = await ScalarIntAsync(conn, SqlQueries.InterTxCreated1h, ct);
+        
+        var intraClosedCount24h = await ScalarIntAsync(conn, SqlQueries.IntraClosedCount24h, ct);
+        var interClosedCount24h = await ScalarIntAsync(conn, SqlQueries.InterClosedCount24h, ct);
+        var intraOtherStateCount24h = await ScalarIntAsync(conn, SqlQueries.IntraOtherStateCount24h, ct);
+        var interOtherStateCount24h = await ScalarIntAsync(conn, SqlQueries.InterOtherStateCount24h, ct);
+        var intraCompensatedCurrentCount = await ScalarIntAsync(conn, SqlQueries.IntraCompensatedCurrentCount, ct);
+        var interCompensatedCurrentCount = await ScalarIntAsync(conn, SqlQueries.InterCompensatedCurrentCount, ct);
         
         var intraSuccessSpeedP99 = await ScalarIntAsync(conn, SqlQueries.IntraSuccessSpeedP99_24h, ct);
         var interSuccessSpeedP99 = await ScalarIntAsync(conn, SqlQueries.InterSuccessSpeedP99_24h, ct);
@@ -152,11 +172,8 @@ public sealed class SqlPollingClient
         var qualityAnomalies = await QueryListAsync(conn, SqlQueries.QualityAnomalies, 
             r => new AnomalyRow(GetString(r, 0), GetInt(r, 1), GetInt(r, 2), GetInt(r, 3), GetInt(r, 4), GetInt(r, 5)), ct);
 
-        // Note: AmountTotal1h, Total24h and other amount scalars are DEPRECATED 
-        // to avoid single scalar queries; use tabular amount queries instead (intraAmountByType).
-        // Returning 0 for now to maintain snapshot record signature if not removed yet.
-        var intraAmountTotal1h = 0.0;
-        var interAmountTotal1h = 0.0;
+        var intraAmountTotal1h = await ScalarDoubleAsync(conn, SqlQueries.IntraAmountTotal1h, ct);
+        var interAmountTotal1h = await ScalarDoubleAsync(conn, SqlQueries.InterAmountTotal1h, ct);
 
         return new Snapshot(
             dayType,
@@ -179,7 +196,7 @@ public sealed class SqlPollingClient
             intraPendingBucket, interPendingBucket,
             intraFailures, interFailures,
             intraTypeCount, interTypeCount,
-            new List<AmountTotalRow>(), new List<AmountTotalRow>(), 
+            intraAmountTotal, interAmountTotal, 
             intraAmountByType, interAmountByType,
             intraSuccessSpeed, interSuccessSpeed,
             
@@ -191,12 +208,17 @@ public sealed class SqlPollingClient
             qualityAnomalies,
 
             // New High-Res & Anomalies
+            intraSuccessCount24h, interSuccessCount24h,
+            intraPendingAgeStats, interPendingAgeStats,
             intraTxCreated5m, interTxCreated5m,
             intraTxCreated1h, interTxCreated1h,
             intraAmountTotal1h, interAmountTotal1h,
             intraSuccessSpeedP99, interSuccessSpeedP99,
             intraZeroDurationCount, interZeroDurationCount,
-            intraMissingModCount, interMissingModCount
+            intraMissingModCount, interMissingModCount,
+            intraClosedCount24h, interClosedCount24h,
+            intraOtherStateCount24h, interOtherStateCount24h,
+            intraCompensatedCurrentCount, interCompensatedCurrentCount
         );
     }
 
@@ -299,11 +321,16 @@ public sealed class SqlPollingClient
         IReadOnlyList<AnomalyRow> QualityAnomalies,
 
         // High Resolution & Anomalies
+        int IntraSuccessCount24h, int InterSuccessCount24h,
+        IReadOnlyList<AgeStatsRow> IntraPendingAgeStats, IReadOnlyList<AgeStatsRow> InterPendingAgeStats,
         int IntraTxCreated5m, int InterTxCreated5m,
         int IntraTxCreated1h, int InterTxCreated1h,
         double IntraAmountTotal1h, double InterAmountTotal1h,
         int IntraSuccessSpeedP99, int InterSuccessSpeedP99,
         int IntraZeroDurationCount, int InterZeroDurationCount,
-        int IntraMissingModCount, int InterMissingModCount
+        int IntraMissingModCount, int InterMissingModCount,
+        int IntraClosedCount24h, int InterClosedCount24h,
+        int IntraOtherStateCount24h, int InterOtherStateCount24h,
+        int IntraCompensatedCurrentCount, int InterCompensatedCurrentCount
     );
 }

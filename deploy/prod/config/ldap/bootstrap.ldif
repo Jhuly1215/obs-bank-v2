@@ -1,0 +1,30 @@
+dn: ou=people,dc=planetexpress,dc=com
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=planetexpress,dc=com
+objectClass: organizationalUnit
+ou: groups
+
+dn: cn=fry,ou=people,dc=planetexpress,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: fry
+sn: Fry
+uid: fry
+userPassword: frypassword
+mail: fry@planetexpress.com
+memberOf: cn=admin_staff,ou=people,dc=planetexpress,dc=com
+givenName: Philip
+
+dn: cn=admin_staff,ou=people,dc=planetexpress,dc=com
+objectClass: groupOfNames
+cn: admin_staff
+member: cn=fry,ou=people,dc=planetexpress,dc=com
+
+dn: cn=ship_crew,ou=people,dc=planetexpress,dc=com
+objectClass: groupOfNames
+cn: ship_crew
+member: cn=fry,ou=people,dc=planetexpress,dc=com

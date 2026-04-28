@@ -226,7 +226,7 @@ services:
     restart: unless-stopped
 
   openldap:
-    image: osixia/openldap:${OPENLDAP_VERSION}
+    image: osixia/openldap:1.4.0
     container_name: obs-bank-v2-ldap-1
     ports:
       - "${LDAP_PORT:-389}:389"

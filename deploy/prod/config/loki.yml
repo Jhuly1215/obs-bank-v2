@@ -28,14 +28,16 @@ storage_config:
     secret_access_key: ${LOKI_S3_SECRET_KEY}
     s3forcepathstyle: true
     region: ${LOKI_S3_REGION}
-    insecure: true
+    insecure: ${LOKI_S3_INSECURE}
+    http_config:
+      insecure_skip_verify: true
 
   tsdb_shipper:
-    active_index_directory: /loki/tsdb-index
-    cache_location: /loki/tsdb-cache
+    active_index_directory: ${LOKI_STORAGE_DIR}/tsdb-index
+    cache_location: ${LOKI_STORAGE_DIR}/tsdb-cache
 
 compactor:
-  working_directory: /loki/compactor
+  working_directory: ${LOKI_STORAGE_DIR}/compactor
   retention_enabled: true
   delete_request_store: s3
 

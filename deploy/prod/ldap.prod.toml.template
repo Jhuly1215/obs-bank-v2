@@ -9,14 +9,14 @@ bind_dn = "${LDAP_BIND_DN}"
 bind_password = "${LDAP_BIND_PASSWORD}"
 
 # Ruteo y Búsqueda
-search_filter = "(sAMAccountName=%s)"
+search_filter = "${LDAP_SEARCH_FILTER}"
 search_base_dns = ["${LDAP_SEARCH_BASE}"]
 
 [servers.attributes]
 name = "givenName"
 surname = "sn"
-username = "sAMAccountName"
-member_of = "memberOf"
+username = "${LDAP_USER_ATTR}"
+member_of = "${LDAP_MEMBER_ATTR}"
 email =  "mail"
 
 [[servers.group_mappings]]

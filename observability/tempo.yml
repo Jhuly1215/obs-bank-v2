@@ -14,7 +14,7 @@ storage:
   trace:
     backend: local
     local:
-      path: /var/tempo/traces
+      path: ${TEMPO_STORAGE_DIR}/traces
 
 compactor:
   compaction:
@@ -29,7 +29,7 @@ metrics_generator:
     external_labels:
       source: tempo
   storage:
-    path: /var/tempo/generator/wal
+    path: ${TEMPO_STORAGE_DIR}/generator/wal
     remote_write:
       - url: ${PROMETHEUS_URL}/api/v1/write
         send_exemplars: true

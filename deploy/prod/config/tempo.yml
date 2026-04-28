@@ -1,30 +1,61 @@
 server:
-  http_listen_port: 3200
+  http_listen_port: ${TEMPO_HTTP_LISTEN_PORT:-3200}
+  grpc_listen_port: ${TEMPO_FRONTEND_PORT:-9095}
 
 distributor:
   receivers:
     otlp:
       protocols:
         grpc:
-          endpoint: 0.0.0.0:4317
+          endpoint: 0.0.0.0:${TEMPO_GRPC_LISTEN_PORT:-4317}
         http:
-          endpoint: 0.0.0.0:4318
+          endpoint: 0.0.0.0:${TEMPO_HTTP_RECEIVER_PORT:-4318}
+
+ingester:
+  trace_idle_period: 10s
+  max_block_bytes: 104857600
+  max_block_duration: 5m
 
 storage:
   trace:
     backend: s3
+
+    wal:
+      path: ${TEMPO_STORAGE_DIR:-/var/tempo}/wal
+
     s3:
       bucket: ${TEMPO_S3_BUCKET}
       endpoint: ${TEMPO_S3_ENDPOINT}
+      region: ${TEMPO_S3_REGION}
       access_key: ${TEMPO_S3_ACCESS_KEY}
       secret_key: ${TEMPO_S3_SECRET_KEY}
       insecure: ${TEMPO_S3_INSECURE}
       forcepathstyle: true
 
+      # Temporal por el error del certificado:
+      # x509: certificate is valid for Jhuly, not minio.ecofuturo.com.bo
+      # En producción final debe ser false cuando corrijan el certificado.
+      tls_insecure_skip_verify: ${TEMPO_S3_SKIP_VERIFY:-true}
+
 compactor:
   compaction:
-    block_retention: 2160h
+    block_retention: ${TEMPO_BLOCK_RETENTION:-2160h}
 
 querier:
   frontend_worker:
-    frontend_address: 127.0.0.1:9095
+    frontend_address: 127.0.0.1:${TEMPO_FRONTEND_PORT:-9095}
+
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: ${TEMPO_STORAGE_DIR:-/var/tempo}/generator/wal
+    remote_write:
+      - url: ${PROMETHEUS_URL:-http://prometheus:9090}/api/v1/write
+        send_exemplars: true
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [local-blocks, service-graphs, span-metrics]

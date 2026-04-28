@@ -13,6 +13,7 @@ x-otel-base: &otel-base
     - OTEL_METRICS_EXPORTER=${OTEL_AGENT_METRICS_EXPORT}
     - OTEL_TRACES_EXPORTER=${OTEL_AGENT_TRACES_EXPORT}
     - OTEL_DOTNET_AUTO_LOGS_INCLUDE_FORMATTED_MESSAGE=true
+    - OTEL_DOTNET_AUTO_LOG_DIRECTORY=${OTEL_DOTNET_AUTO_LOG_DIRECTORY:-./logs/otel-agent}
   volumes:
     - otel_binaries:/otel-auto:ro
   networks:
@@ -55,7 +56,7 @@ services:
       - "--web.enable-remote-write-receiver"
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prom_data:/prometheus
+      - ./data/prometheus:/prometheus
     networks: [ obs ]
 
   loki:
@@ -63,9 +64,11 @@ services:
     command: 
       - -config.file=/etc/loki/config.yml
       - -config.expand-env=true
+    environment:
+      LOKI_STORAGE_DIR: "${LOKI_STORAGE_DIR:-/loki}"
     volumes:
       - ./observability/loki-config.yml:/etc/loki/config.yml:ro
-      - loki_data:/loki
+      - ./data/loki:/loki
     networks: [ obs ]
 
   tempo:
@@ -79,9 +82,10 @@ services:
       TEMPO_GRPC_LISTEN_PORT: "${TEMPO_GRPC_LISTEN_PORT}"
       TEMPO_HTTP_RECEIVER_PORT: "${TEMPO_HTTP_RECEIVER_PORT}"
       TEMPO_FRONTEND_PORT: "${TEMPO_FRONTEND_PORT}"
+      TEMPO_STORAGE_DIR: "${TEMPO_STORAGE_DIR:-/var/tempo}"
     volumes:
       - ./observability/tempo.yml:/etc/tempo.yaml:ro
-      - tempo_data:/var/tempo
+      - ./data/tempo:/var/tempo
     networks: [ obs ]
 
   # --- INIT-CONFIG (Pre-procesador de plantillas) ---
@@ -160,7 +164,7 @@ services:
     volumes:
       - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - ./sample-logs:/var/log/bank-apis:ro
-      - alloy_data:/var/lib/alloy/data
+      - ./data/alloy:/var/lib/alloy/data
     depends_on:
       - loki
     networks: [ obs ]
@@ -205,7 +209,7 @@ services:
     image: redis:${REDIS_VERSION}
     command: [ "redis-server", "--appendonly", "yes" ]
     volumes:
-      - redis_data:/data
+      - ./data/redis:/data
     networks: [ obs ]
     restart: unless-stopped
 
@@ -222,7 +226,7 @@ services:
     restart: unless-stopped
 
   openldap:
-    image: osixia/openldap:${OPENLDAP_VERSION}
+    image: osixia/openldap:1.4.0
     container_name: obs-bank-v2-ldap-1
     ports:
       - "${LDAP_PORT:-389}:389"
@@ -236,10 +240,5 @@ networks:
     driver: bridge
 
 volumes:
-  prom_data:
-  loki_data:
-  tempo_data:
-  alloy_data:
-  redis_data:
   otel_binaries:
   shared_config:

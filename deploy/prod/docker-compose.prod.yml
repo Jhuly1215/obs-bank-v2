@@ -14,6 +14,9 @@ services:
       - LDAP_SEARCH_BASE=${LDAP_SEARCH_BASE}
       - LDAP_ADMIN_GROUP=${LDAP_GROUP_ADMIN}
       - LDAP_VIEWER_GROUP=${LDAP_GROUP_VIEWER}
+      - LDAP_SEARCH_FILTER=${LDAP_SEARCH_FILTER}
+      - LDAP_USER_ATTR=${LDAP_USER_ATTR}
+      - LDAP_MEMBER_ATTR=${LDAP_MEMBER_ATTR}
     volumes:
       - ./deploy/prod/ldap.prod.toml.template:/tmp/templates/ldap.prod.toml.template:ro
       - shared_config:/etc/shared
@@ -31,34 +34,24 @@ services:
     volumes:
       - prom_data_prod:/prometheus
 
-  minio:
-    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
-    command: server /data --console-address ":9001"
-    restart: unless-stopped
-    environment:
-      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
-      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
-    volumes:
-      - minio_data_prod:/data
-    networks: [ obs ]
-    ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
-
   minio-init:
     image: minio/mc:RELEASE.2025-01-17T23-25-50Z
-    depends_on: [ minio ]
     networks: [ obs ]
     environment:
-      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
-      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
-      MINIO_BUCKET_LOKI: "${MINIO_BUCKET_LOKI}"
-      MINIO_BUCKET_TEMPO: "${MINIO_BUCKET_TEMPO}"
+      MINIO_ROOT_USER: "${LOKI_S3_ACCESS_KEY}"
+      MINIO_ROOT_PASSWORD: "${LOKI_S3_SECRET_KEY}"
+      MINIO_BUCKET_LOKI: "${LOKI_S3_BUCKET}"
+      MINIO_BUCKET_TEMPO: "${TEMPO_S3_BUCKET}"
+      S3_ENDPOINT: "${LOKI_S3_ENDPOINT}"
+      MINIO_SCHEME: "${MINIO_SCHEME:-http}"
     entrypoint: >
-      /bin/sh -c " until /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do
-        echo 'waiting for minio...'; sleep 2;
-      done; /usr/bin/mc mb -p local/${MINIO_BUCKET_LOKI} || true; /usr/bin/mc mb -p local/${MINIO_BUCKET_TEMPO} || true; /usr/bin/mc anonymous set none local/${MINIO_BUCKET_LOKI} || true; /usr/bin/mc anonymous set none local/${MINIO_BUCKET_TEMPO} || true; echo 'minio buckets ready'; exit 0; "
+      /bin/sh -c " until /usr/bin/mc alias set remote $${MINIO_SCHEME}://$${S3_ENDPOINT} $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do
+        echo 'waiting for remote minio at $${MINIO_SCHEME}://$${S3_ENDPOINT}...'; sleep 5;
+      done; /usr/bin/mc mb -p remote/$${MINIO_BUCKET_LOKI} || true; /usr/bin/mc mb -p remote/$${MINIO_BUCKET_TEMPO} || true; /usr/bin/mc anonymous set none remote/$${MINIO_BUCKET_LOKI} || true; /usr/bin/mc anonymous set none remote/$${MINIO_BUCKET_TEMPO} || true; echo 'remote minio buckets ready'; exit 0; "
     restart: "no"
+    extra_hosts:
+      - "minio.ecofuturo.com.bo:host-gateway"
+      - "minio-console.ecofuturo.com.bo:host-gateway"
 
   loki:
     ports: []
@@ -67,14 +60,18 @@ services:
       - -config.file=/etc/loki/config.yml
       - -config.expand-env=true
     environment:
-      LOKI_S3_BUCKET: "${MINIO_BUCKET_LOKI}"
+      LOKI_S3_BUCKET: "${LOKI_S3_BUCKET}"
       LOKI_S3_ENDPOINT: "${LOKI_S3_ENDPOINT:-minio:9000}"
-      LOKI_S3_ACCESS_KEY: "${MINIO_ROOT_USER}"
-      LOKI_S3_SECRET_KEY: "${MINIO_ROOT_PASSWORD}"
+      LOKI_S3_ACCESS_KEY: "${LOKI_S3_ACCESS_KEY}"
+      LOKI_S3_SECRET_KEY: "${LOKI_S3_SECRET_KEY}"
       LOKI_S3_REGION: "${LOKI_S3_REGION:-us-east-1}"
+      LOKI_S3_INSECURE: "${LOKI_S3_INSECURE:-false}"
     volumes:
       - loki_data_prod:/loki
       - ./deploy/prod/config/loki.yml:/etc/loki/config.yml:ro
+    extra_hosts:
+      - "minio.ecofuturo.com.bo:host-gateway"
+      - "minio-console.ecofuturo.com.bo:host-gateway"
 
   tempo:
     ports: []
@@ -83,17 +80,29 @@ services:
       - -config.file=/etc/tempo.yaml
       - -config.expand-env=true
     environment:
-      TEMPO_S3_BUCKET: "${MINIO_BUCKET_TEMPO}"
-      TEMPO_S3_ENDPOINT: "${TEMPO_S3_ENDPOINT:-minio:9000}"
-      TEMPO_S3_ACCESS_KEY: "${MINIO_ROOT_USER}"
-      TEMPO_S3_SECRET_KEY: "${MINIO_ROOT_PASSWORD}"
-      TEMPO_S3_INSECURE: "${TEMPO_S3_INSECURE:-true}"
+      TEMPO_S3_BUCKET: "${TEMPO_S3_BUCKET}"
+      TEMPO_S3_ENDPOINT: "${TEMPO_S3_ENDPOINT}"
+      TEMPO_S3_REGION: "${TEMPO_S3_REGION}"
+      TEMPO_S3_ACCESS_KEY: "${TEMPO_S3_ACCESS_KEY}"
+      TEMPO_S3_SECRET_KEY: "${TEMPO_S3_SECRET_KEY}"
+      TEMPO_S3_INSECURE: "${TEMPO_S3_INSECURE}"
+      TEMPO_S3_SKIP_VERIFY: "${TEMPO_S3_SKIP_VERIFY}"
+      TEMPO_BLOCK_RETENTION: "${TEMPO_BLOCK_RETENTION}"
+      TEMPO_STORAGE_DIR: "${TEMPO_STORAGE_DIR}"
+      TEMPO_HTTP_LISTEN_PORT: "${TEMPO_HTTP_LISTEN_PORT}"
+      TEMPO_GRPC_LISTEN_PORT: "${TEMPO_GRPC_LISTEN_PORT}"
+      TEMPO_HTTP_RECEIVER_PORT: "${TEMPO_HTTP_RECEIVER_PORT}"
+      TEMPO_FRONTEND_PORT: "${TEMPO_FRONTEND_PORT}"
     volumes:
       - tempo_data_prod:/var/tempo
       - ./deploy/prod/config/tempo.yml:/etc/tempo.yaml:ro
+    extra_hosts:
+      - "minio.ecofuturo.com.bo:host-gateway"
+      - "minio-console.ecofuturo.com.bo:host-gateway"
 
   grafana:
-    ports: []
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
     restart: unless-stopped
     environment:
       GF_SERVER_DOMAIN: "${DOMAIN_NAME}"
@@ -142,23 +151,16 @@ services:
     volumes:
       - redis_data_prod:/data
 
-  nginx:
-    image: nginx:1.27.4-stable-alpine
-    container_name: obs-bank-v2-proxy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
-    volumes:
-      - ./deploy/prod/config/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
-      - ./deploy/prod/certs:/etc/nginx/certs:ro
-    networks: [ obs ]
-    depends_on: [ grafana ]
-
   openldap:
-    profiles: [ disable ]
+    environment:
+      - LDAP_DOMAIN=${LDAP_DOMAIN:-planetexpress.com}
+      - LDAP_ADMIN_PASSWORD=${LDAP_BIND_PASSWORD:-GoodNewsEveryone}
+      - LDAP_TLS=false
+      - LDAP_REMOVE_CONFIG_AFTER_SETUP=false
+      - LDAP_RFC2307BIS_SCHEMA=true
+    volumes:
+      - ./deploy/prod/config/ldap:/container/service/slapd/assets/config/bootstrap/ldif/custom
+    networks: [ obs ]
 
 volumes:
   prom_data_prod:
@@ -166,5 +168,4 @@ volumes:
   tempo_data_prod:
   alloy_data_prod:
   redis_data_prod:
-  minio_data_prod:
   shared_config: # Re-usamos el volumen de configuración compartida

@@ -1,20 +1,27 @@
-# ObsBank - Despliegue a Producción (S3 & Seguridad)
+# ObsBank - Despliegue a Producción (S3 & IIS Integration)
 
-Este directorio contiene la orquestación maestra para el entorno de misión crítica del Banco. Gracias a la arquitectura unificada, la configuración es **100% externa** y reside exclusivamente en el archivo `.env`.
+Este directorio contiene la orquestación maestra para el entorno de producción del Banco. El sistema está diseñado para integrarse con la infraestructura de Windows/IIS existente mientras utiliza Docker para el stack de observabilidad.
 
 ---
 
-## 🛠️ Configuración "Zero-Hardcode" en PROD
+## 🛠️ Configuración "Zero-Hardcode"
 
-En producción, el sistema utiliza **MinIO (S3)** para garantizar que los logs y trazas se conserven por años sin saturar el sistema de archivos del servidor.
+En producción, el sistema utiliza **MinIO (S3)** para garantizar que los logs y trazas se conserven por años sin saturar el disco del servidor, permitiendo escalabilidad horizontal.
 
 ### Pasos Críticos pre-Arranque:
-1. **Archivo `.env`**: Edita `deploy/prod/.env` con las credenciales reales de Ecofuturo.
-   - `SQLSERVER_CONN`: Cadena oficial del Banco.
-   - `LDAP_SERVER_HOST`: IP del Controlador de Dominio.
-   - `MINIO_ROOT_PASSWORD`: Contraseña robusta para el almacenamiento.
-2. **Certificados SSL**: Coloca `fullchain.pem` y `privkey.pem` en `deploy/prod/certs/`.
-3. **FCM (Firebase)**: Asegúrate de que `firebase-service-account.json` esté en `observability/certs/`.
+1. **Archivo `.env`**: Edita `deploy/prod/.env` con los valores reales:
+   - `DOMAIN_NAME`: El dominio DNS asignado (ej: `obs.ecofuturo.com.bo`).
+   - `LOKI_S3_ENDPOINT`: IP y puerto del servidor remoto de MinIO (ej: `10.0.0.50:9000`).
+   - `SQLSERVER_CONN`: Cadena de conexión al SQL Server corporativo.
+   - `LDAP_SERVER_HOST`: IP del Controlador de Dominio (Active Directory).
+   - `PROD_LOGS_PATH`: Ruta absoluta en el host donde las APIs escriben sus logs.
+2. **Servidor de Almacenamiento**:
+   - Asegúrese de que el servidor remoto de MinIO sea accesible desde este servidor en el puerto 9000.
+   - Las credenciales (`MINIO_ROOT_USER`/`PASSWORD`) deben coincidir en ambos servidores.
+3. **Proxy Inverso (IIS)**: 
+   - Se debe configurar **Application Request Routing (ARR)** y **URL Rewrite** en el IIS del host.
+   - Crear un sitio que escuche en el puerto 443 (HTTPS) y redirija el tráfico al puerto 3000 (Grafana).
+4. **FCM (Firebase)**: Colocar `firebase-service-account.json` en `observability/certs/` para las notificaciones.
 
 ---
 
@@ -22,35 +29,36 @@ En producción, el sistema utiliza **MinIO (S3)** para garantizar que los logs y
 
 Desde la raíz del proyecto (`obs-bank-v2/`):
 
-### Iniciar / Actualizar (Recomendado)
-El script Powershell maneja la limpieza y la inyección de los archivos de producción automáticamente:
+### Iniciar / Actualizar
+El script Powershell automatiza la combinación de configuraciones base y de producción:
 ```powershell
 ./deploy.prod.ps1
 ```
 
 ### Detener el Stack
-```bash
+```powershell
 docker compose -f docker-compose.yml -f deploy/prod/docker-compose.prod.yml down
 ```
 
 ---
 
-## 📂 Arquitectura de Producción
+## 📂 Arquitectura de Producción Actualizada
 
 | Componente | Función en Prod | Configuración |
 | :--- | :--- | :--- |
-| **Nginx Proxy** | Seguridad SSL y balanceo. | Puerto 443 (HTTPS) |
-| **Loki / Tempo** | Almacenamiento persistente en S3. | Buckets en MinIO |
-| **Config-Init** | Automatizador de AD/LDAP. | Convierte plantillas en configs |
-| **SQL Poller** | Monitoreo de Transacciones DB. | Métrica de negocio P99 |
+| **IIS (Host)** | Proxy Inverso y SSL. | Puerto 443 -> localhost:3000 |
+| **Loki / Tempo** | Almacenamiento en S3 (MinIO). | Persistencia de largo plazo |
+| **Config-Init** | Automatizador de AD/LDAP. | Inyecta credenciales en Grafana |
+| **OpenLDAP (Test)** | Solo para ambientes de prueba. | Habilitado con bootstrap.ldif |
+| **SQL Poller** | Monitoreo de Transacciones. | Ingesta de métricas de negocio |
 
 ---
 
-## 🚨 Seguridad y Backup
+## 🚨 Seguridad y Cumplimiento
 
-1. **Invisibilidad**: Ningún servicio (Prometheus, Loki, DB) está expuesto a la red LAN, excepto el Proxy HTTPS (443) y el Colector OTLP (4317).
-2. **Alertas Nativas**: El sistema incluye reglas de alerta en `observability/prometheus/rules.yml` que monitorean caídas de servicio y carga de CPU automáticamente.
-3. **Backup de Logs**: Al estar en MinIO, puedes apuntar cualquier herramienta de backup de S3 a la carpeta de `minio_data` para respaldos fuera del sitio.
+1. **Aislamiento**: Ningún servicio (Prometheus, Loki, MinIO API) debe exponerse a la red LAN. Solo el Colector OTLP (4317) y el IIS (443) deben ser accesibles.
+2. **Retención**: La retención de datos se gestiona en los archivos `loki.yml` y `tempo.yml` en la carpeta `config/`. Ajustar según política de auditoría del banco.
+3. **Backups**: Realizar backups periódicos del volumen `minio_data_prod` para asegurar la persistencia de los logs históricos.
 
 ---
 _"La estabilidad del Banco depende de la visibilidad de sus datos"._

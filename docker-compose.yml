@@ -88,26 +88,6 @@ services:
       - ./data/tempo:/var/tempo
     networks: [ obs ]
 
-  # --- INIT-CONFIG (Pre-procesador de plantillas) ---
-  config-init:
-    image: alpine:3.21
-    command: >
-      sh -c "apk add --no-cache gettext && 
-             envsubst < /tmp/templates/ldap.toml.template > /etc/shared/ldap.toml"
-    environment:
-      - LDAP_SERVER_HOST=${LDAP_SERVER_HOST}
-      - LDAP_SERVER_PORT=${LDAP_SERVER_PORT}
-      - LDAP_USE_SSL=${LDAP_USE_SSL}
-      - LDAP_BIND_DN=${LDAP_BIND_DN}
-      - LDAP_BIND_PASSWORD=${LDAP_BIND_PASSWORD}
-      - LDAP_SEARCH_BASE=${LDAP_SEARCH_BASE}
-      - LDAP_GROUP_ADMIN=${LDAP_GROUP_ADMIN}
-      - LDAP_GROUP_VIEWER=${LDAP_GROUP_VIEWER}
-    volumes:
-      - ./observability/grafana/ldap.toml.template:/tmp/templates/ldap.toml.template:ro
-      - shared_config:/etc/shared
-    networks: [ obs ]
-
   grafana:
     image: grafana/grafana:${GRAFANA_VERSION}
     container_name: grafana
@@ -136,14 +116,11 @@ services:
       - ./observability/grafana/data:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
-      # Montamos el archivo generado por config-init
-      - shared_config:/etc/grafana:ro
+      - ./deploy/prod/config/ldap.toml:/etc/grafana/ldap.toml:ro
       - ./observability/certs/ca-banco.pem:/etc/ssl/certs/ca-banco.pem:ro
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:
-      config-init:
-        condition: service_completed_successfully
       prometheus:
         condition: service_started
       loki:
@@ -241,4 +218,3 @@ networks:
 
 volumes:
   otel_binaries:
-  shared_config:

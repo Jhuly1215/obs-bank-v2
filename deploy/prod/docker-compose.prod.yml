@@ -1,27 +1,4 @@
 services:
-  # --- INIT-CONFIG (Pre-procesador de plantillas en Producción) ---
-  config-init:
-    image: alpine:3.21
-    command: >
-      sh -c "apk add --no-cache gettext && 
-             envsubst < /tmp/templates/ldap.prod.toml.template > /etc/shared/ldap.toml"
-    environment:
-      - LDAP_SERVER_HOST=${LDAP_SERVER_HOST}
-      - LDAP_SERVER_PORT=${LDAP_SERVER_PORT}
-      - LDAP_USE_SSL=${LDAP_USE_SSL}
-      - LDAP_BIND_DN=${LDAP_BIND_DN}
-      - LDAP_BIND_PASSWORD=${LDAP_BIND_PASSWORD}
-      - LDAP_SEARCH_BASE=${LDAP_SEARCH_BASE}
-      - LDAP_ADMIN_GROUP=${LDAP_GROUP_ADMIN}
-      - LDAP_VIEWER_GROUP=${LDAP_GROUP_VIEWER}
-      - LDAP_SEARCH_FILTER=${LDAP_SEARCH_FILTER}
-      - LDAP_USER_ATTR=${LDAP_USER_ATTR}
-      - LDAP_MEMBER_ATTR=${LDAP_MEMBER_ATTR}
-    volumes:
-      - ./deploy/prod/ldap.prod.toml.template:/tmp/templates/ldap.prod.toml.template:ro
-      - shared_config:/etc/shared
-    networks: [ obs ]
-
   otel-collector:
     ports:
       - "${OTLP_GRPC_PORT:-4317}:4317"
@@ -110,12 +87,7 @@ services:
       GF_AUTH_LDAP_ENABLED: "true"
       GF_AUTH_LDAP_CONFIG_FILE: "/etc/grafana/ldap.toml"
     volumes:
-      # Usamos el archivo generado por config-init en Prod también
-      - shared_config:/etc/grafana:ro
       - ./deploy/prod/config/grafana.ini:/etc/grafana/grafana.ini:ro
-    depends_on:
-      config-init:
-        condition: service_completed_successfully
 
   alloy:
     ports: []
@@ -168,4 +140,3 @@ volumes:
   tempo_data_prod:
   alloy_data_prod:
   redis_data_prod:
-  shared_config: # Re-usamos el volumen de configuración compartida

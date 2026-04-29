@@ -88,13 +88,28 @@ public sealed class SqlMetrics : System.IDisposable
             
         _meter.CreateObservableGauge("tx_programmed_count", () => 
             MapStates(_state.Current?.IntraProgrammed, _state.Current?.InterProgrammed), description: "Backlog programado (0,7,17)");
+        _meter.CreateObservableGauge("tx_programmed_current_count", () => 
+            MapStates(_state.Current?.IntraProgrammed, _state.Current?.InterProgrammed), description: "Alias compatibilidad backlog programado actual");
 
         _meter.CreateObservableGauge("tx_review_count", CreateReviewCount, description: "Conteo en estado 100");
+        _meter.CreateObservableGauge("tx_review_current_count", CreateReviewCount, description: "Alias compatibilidad review actual");
         _meter.CreateObservableGauge("tx_review_avg_age_seconds", CreateReviewAvg, unit: "s", description: "Promedio edad estado 100");
         _meter.CreateObservableGauge("tx_review_max_age_seconds", CreateReviewMax, unit: "s", description: "Max edad estado 100");
         _meter.CreateObservableGauge("tx_review_dead_count", CreateReviewDead, description: "Estado 100 estancado > 300s");
 
+        _meter.CreateObservableGauge("tx_pending_avg_age_seconds", () => 
+            MapAgeStat(_state.Current?.IntraPendingAgeStats, _state.Current?.InterPendingAgeStats, true), 
+            unit: "s", description: "Edad promedio del backlog por estado");
+        _meter.CreateObservableGauge("tx_pending_max_age_seconds", () => 
+            MapAgeStat(_state.Current?.IntraPendingAgeStats, _state.Current?.InterPendingAgeStats, false), 
+            unit: "s", description: "Edad maxima del backlog por estado");
+
+        _meter.CreateObservableGauge("tx_success_count_24h", CreateSuccess24, description: "TX exitosas 24h");
+        
         _meter.CreateObservableGauge("tx_compensated_count_24h", CreateCompensatedCount, description: "TX Compensadas/Despignoradas (9)");
+        _meter.CreateObservableGauge("tx_compensated_current_count", CreateCompensatedCurrentCount, description: "Inventario actual compensadas");
+        _meter.CreateObservableGauge("tx_closed_count_24h", CreateClosedCount24, description: "TX Cerradas/Concluidas en 24h");
+        _meter.CreateObservableGauge("tx_other_state_count_24h", CreateOtherStateCount24, description: "TX en estados intermedios/otros 24h");
 
         // =========================
         // High Resolution & Anomalies (Optimized)
@@ -124,6 +139,9 @@ public sealed class SqlMetrics : System.IDisposable
         // Data Quality Anomalies (Granular)
         // =========================
         _meter.CreateObservableGauge("tx_quality_anomaly_count", CreateAnomalyMetrics, description: "Anomalías de calidad de datos detectadas");
+        _meter.CreateObservableGauge("tx_quality_missing_mod_count_24h", CreateQualityMissingMod, description: "TX exitosas sin fechaModificacion");
+        _meter.CreateObservableGauge("tx_quality_zero_duration_count_24h", CreateQualityZeroDur, description: "TX exitosas con duracion 0");
+        _meter.CreateObservableGauge("tx_quality_negative_duration_count_24h", CreateQualityNegDur, description: "TX exitosas con duracion negativa");
     }
 
     // --- Legacy / Base Creators ---
@@ -335,6 +353,33 @@ public sealed class SqlMetrics : System.IDisposable
             new Measurement<int>(x.NegDur, Tags(s, x.Source, "tipo", x.Tipo.ToString(), "estado", x.Estado.ToString(), "anomaly", "negative_duration"))
         }) ?? Enumerable.Empty<Measurement<int>>());
 
+    private IEnumerable<Measurement<int>> CreateSuccess24() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraSuccessCount24h, Tags(s, "intra")),
+        new Measurement<int>(s.InterSuccessCount24h, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateQualityMissingMod() => SafeGen(s =>
+        s.QualityAnomalies?.Select(x => new Measurement<int>(x.MissingMod, Tags(s, x.Source, "tipo", x.Tipo.ToString(), "estado", x.Estado.ToString())))
+        ?? Enumerable.Empty<Measurement<int>>());
+
+    private IEnumerable<Measurement<int>> CreateQualityZeroDur() => SafeGen(s =>
+        s.QualityAnomalies?.Select(x => new Measurement<int>(x.ZeroDur, Tags(s, x.Source, "tipo", x.Tipo.ToString(), "estado", x.Estado.ToString())))
+        ?? Enumerable.Empty<Measurement<int>>());
+
+    private IEnumerable<Measurement<int>> CreateQualityNegDur() => SafeGen(s =>
+        s.QualityAnomalies?.Select(x => new Measurement<int>(x.NegDur, Tags(s, x.Source, "tipo", x.Tipo.ToString(), "estado", x.Estado.ToString())))
+        ?? Enumerable.Empty<Measurement<int>>());
+
+    private IEnumerable<Measurement<int>> CreateClosedCount24() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraClosedCount24h, Tags(s, "intra")),
+        new Measurement<int>(s.InterClosedCount24h, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateOtherStateCount24() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraOtherStateCount24h, Tags(s, "intra")),
+        new Measurement<int>(s.InterOtherStateCount24h, Tags(s, "inter"))});
+
+    private IEnumerable<Measurement<int>> CreateCompensatedCurrentCount() => SafeGen(s => new[] {
+        new Measurement<int>(s.IntraCompensatedCurrentCount, Tags(s, "intra")),
+        new Measurement<int>(s.InterCompensatedCurrentCount, Tags(s, "inter"))});
 
     // Helpers
     private IEnumerable<Measurement<int>> SafeGen(System.Func<SqlPollingClient.Snapshot, IEnumerable<Measurement<int>>> generator)

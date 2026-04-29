@@ -1,10 +1,11 @@
 [[servers]]
-# La IP o nombre del contenedor LDAP falso en la red docker
 host = "openldap"
-port = 10389
+port = 389
 use_ssl = false
+start_tls = false
+ssl_skip_verify = false
+timeout = 10
 
-# El usuario "Administrador" del LDAP de la imagen rroemhild
 bind_dn = "cn=admin,dc=planetexpress,dc=com"
 bind_password = "GoodNewsEveryone"
 
@@ -15,15 +16,14 @@ search_base_dns = ["ou=people,dc=planetexpress,dc=com"]
 name = "givenName"
 surname = "sn"
 username = "uid"
+email = "mail"
 member_of = "memberOf"
-email =  "mail"
 
 [[servers.group_mappings]]
-# Si es del grupo admin_staff, es Admin en Grafana
 group_dn = "cn=admin_staff,ou=people,dc=planetexpress,dc=com"
 org_role = "Admin"
+grafana_admin = true
 
 [[servers.group_mappings]]
-# Si es de ship_crew, es Lector (Fry, Bender, etc)
 group_dn = "cn=ship_crew,ou=people,dc=planetexpress,dc=com"
 org_role = "Viewer"

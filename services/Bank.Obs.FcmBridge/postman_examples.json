@@ -1,0 +1,49 @@
+[
+  {
+    "name": "Registrar Dispositivo",
+    "request": {
+      "method": "POST",
+      "url": "http://localhost:5000/v1/dispositivos-notificaciones",
+      "header": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mode": "raw",
+        "raw": "{\n  \"codigoUsuario\": \"USR12345\",\n  \"tokenFcm\": \"fz_yK..._some_long_token\",\n  \"identificadorDispositivo\": \"iPhone 15 Pro\",\n  \"versionAplicacion\": \"1.0.2\"\n}"
+      }
+    }
+  },
+  {
+    "name": "Dar Baja Dispositivo",
+    "request": {
+      "method": "PATCH",
+      "url": "http://localhost:5000/v1/dispositivos-notificaciones/baja",
+      "header": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mode": "raw",
+        "raw": "{\n  \"tokenFcm\": \"fz_yK..._some_long_token\",\n  \"motivoBaja\": \"Cierre de sesion\"\n}"
+      }
+    }
+  },
+  {
+    "name": "Listar Dispositivos Activos (Solo Diagnóstico)",
+    "request": {
+      "method": "GET",
+      "url": "http://localhost:5000/v1/dispositivos-notificaciones/activos",
+      "header": [
+        {
+          "key": "Authorization",
+          "value": "Bearer DEV_INSECURE_KEY_REPLACE_ME"
+        }
+      ]
+    }
+  }
+]

@@ -1,8 +1,9 @@
 using Bank.Obs.FcmBridge.Models;
+using Bank.Obs.FcmBridge.Models.Responses;
 
 namespace Bank.Obs.FcmBridge.Services;
 
 public interface IFcmService
 {
-    Task<(bool Success, string Topic, string? MessageId, string? ErrorMessage)> SendAlertAsync(GrafanaWebhookPayload payload);
+    Task<ResultadoEnvioNotificacion> enviarAlertaAsync(GrafanaWebhookPayload payload);
 }

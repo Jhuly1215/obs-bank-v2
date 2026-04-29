@@ -197,6 +197,8 @@ services:
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: /etc/secrets/firebase-service-account.json
       BRIDGE_API_KEY: "${BRIDGE_API_KEY}"
+      ConnectionStrings__EcoMonitorDb: "${ECOMONITOR_DB_CONN}"
+      ConnectionStrings__EconetDb: "${ECONET_DB_CONN}"
     volumes:
       - ./observability/certs/firebase-service-account.json:/etc/secrets/firebase-service-account.json:ro
     networks: [ obs ]

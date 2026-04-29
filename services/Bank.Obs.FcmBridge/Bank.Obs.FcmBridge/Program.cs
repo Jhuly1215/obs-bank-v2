@@ -49,7 +49,12 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddSingleton<IFcmService, FcmService>();
+builder.Services.Configure<Bank.Obs.FcmBridge.Options.FcmBridgeOptions>(
+    builder.Configuration.GetSection("FcmBridge"));
+
+builder.Services.AddScoped<Bank.Obs.FcmBridge.Data.IUsuariosNotificacionRepositorio, Bank.Obs.FcmBridge.Data.SqlUsuariosNotificacionRepositorio>();
+builder.Services.AddScoped<Bank.Obs.FcmBridge.Data.ITokensNotificacionRepositorio, Bank.Obs.FcmBridge.Data.SqlTokensNotificacionRepositorio>();
+builder.Services.AddScoped<IFcmService, FcmService>();
 
 var app = builder.Build();
 

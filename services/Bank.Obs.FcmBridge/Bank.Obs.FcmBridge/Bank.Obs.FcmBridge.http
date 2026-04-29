@@ -1,6 +1,52 @@
-@Bank.Obs.FcmBridge_HostAddress = http://localhost:5269
+@Bank.Obs.FcmBridge_HostAddress = http://localhost:8080
 
-GET {{Bank.Obs.FcmBridge_HostAddress}}/weatherforecast/
-Accept: application/json
+### Health
+GET {{Bank.Obs.FcmBridge_HostAddress}}/health
 
-###
+### Registrar usuario notificacion
+POST {{Bank.Obs.FcmBridge_HostAddress}}/v1/usuarios-notificacion
+Authorization: Bearer {{BRIDGE_API_KEY}}
+Content-Type: application/json
+
+{
+  "codigoAgenda": "12345",
+  "correo": "usuario@ecofuturo.com.bo"
+}
+
+### Cambiar estado usuario notificacion
+PATCH {{Bank.Obs.FcmBridge_HostAddress}}/v1/usuarios-notificacion/estado
+Authorization: Bearer {{BRIDGE_API_KEY}}
+Content-Type: application/json
+
+{
+  "codigoAgenda": "12345",
+  "estado": true
+}
+
+### Listar usuarios notificacion
+GET {{Bank.Obs.FcmBridge_HostAddress}}/v1/usuarios-notificacion
+Authorization: Bearer {{BRIDGE_API_KEY}}
+
+### Listar usuarios activos
+GET {{Bank.Obs.FcmBridge_HostAddress}}/v1/usuarios-notificacion/activos
+Authorization: Bearer {{BRIDGE_API_KEY}}
+
+### Enviar alerta Grafana simulada
+POST {{Bank.Obs.FcmBridge_HostAddress}}/alert
+Authorization: Bearer {{BRIDGE_API_KEY}}
+Content-Type: application/json
+
+{
+  "title": "Alerta crítica",
+  "message": "SQL Poller no responde",
+  "state": "alerting",
+  "commonLabels": {
+    "severity": "critical",
+    "service": "bank-sql-poller",
+    "alertname": "SqlPollerDown"
+  },
+  "commonAnnotations": {
+    "dashboard": "https://obs.ecofuturo.com.bo/d/...",
+    "panel": "https://obs.ecofuturo.com.bo/d/.../viewPanel=1"
+  }
+}

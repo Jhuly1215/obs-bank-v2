@@ -3,30 +3,46 @@ using System.Threading.Tasks;
 using Bank.Obs.FcmBridge.Data;
 using Bank.Obs.FcmBridge.Models.Requests;
 using Bank.Obs.FcmBridge.Models.Responses;
-using Microsoft.AspNetCore.Authorization;
+using Bank.Obs.FcmBridge.Options;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Bank.Obs.FcmBridge.Controllers;
 
 [ApiController]
 [Route("v1/usuarios-notificacion")]
-// El lineamiento pide que estén protegidos.
-// Asumiendo que la validación de API Key se hace con algún atributo o middleware como [Authorize(AuthenticationSchemes = "ApiKey")]
-// o simplemente validando el header.
-// Aquí usamos [Authorize] genérico, pero asumiendo que el pipeline lo maneja o se debe validar el header manualmente si no hay un scheme.
-[Authorize] 
 public class UsuariosNotificacionController : ControllerBase
 {
     private readonly IUsuariosNotificacionRepositorio _repositorio;
+    private readonly ILogger<UsuariosNotificacionController> _logger;
+    private readonly FcmBridgeOptions _options;
 
-    public UsuariosNotificacionController(IUsuariosNotificacionRepositorio repositorio)
+    public UsuariosNotificacionController(
+        IUsuariosNotificacionRepositorio repositorio,
+        ILogger<UsuariosNotificacionController> logger,
+        IOptions<FcmBridgeOptions> options)
     {
         _repositorio = repositorio;
+        _logger = logger;
+        _options = options.Value;
+    }
+
+    private bool ValidarAutorizacion(string? authorization)
+    {
+        string apiKey = string.IsNullOrWhiteSpace(_options.apiKey) ? Environment.GetEnvironmentVariable("BRIDGE_API_KEY") ?? "DEV_INSECURE_KEY_REPLACE_ME" : _options.apiKey;
+        return !string.IsNullOrWhiteSpace(authorization) && authorization == $"Bearer {apiKey}";
     }
 
     [HttpPost]
-    public async Task<IActionResult> Registrar([FromBody] RegistrarUsuarioNotificacionRequest request)
+    public async Task<IActionResult> Registrar([FromHeader(Name = "Authorization")] string? authorization, [FromBody] RegistrarUsuarioNotificacionRequest request)
     {
+        if (!ValidarAutorizacion(authorization))
+        {
+            _logger.LogWarning("Intento de acceso denegado en Registrar usuario. Auth header inválido o inexistente.");
+            return Unauthorized(new { error = "Acceso denegado" });
+        }
+
         if (string.IsNullOrWhiteSpace(request.codigoAgenda) || string.IsNullOrWhiteSpace(request.correo))
         {
             return BadRequest(new ResultadoUsuarioNotificacion
@@ -48,8 +64,14 @@ public class UsuariosNotificacionController : ControllerBase
     }
 
     [HttpPatch("estado")]
-    public async Task<IActionResult> CambiarEstado([FromBody] CambiarEstadoUsuarioNotificacionRequest request)
+    public async Task<IActionResult> CambiarEstado([FromHeader(Name = "Authorization")] string? authorization, [FromBody] CambiarEstadoUsuarioNotificacionRequest request)
     {
+        if (!ValidarAutorizacion(authorization))
+        {
+            _logger.LogWarning("Intento de acceso denegado en CambiarEstado. Auth header inválido o inexistente.");
+            return Unauthorized(new { error = "Acceso denegado" });
+        }
+
         if (string.IsNullOrWhiteSpace(request.codigoAgenda))
         {
             return BadRequest(new ResultadoUsuarioNotificacion
@@ -71,8 +93,14 @@ public class UsuariosNotificacionController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> ObtenerTodos()
+    public async Task<IActionResult> ObtenerTodos([FromHeader(Name = "Authorization")] string? authorization)
     {
+        if (!ValidarAutorizacion(authorization))
+        {
+            _logger.LogWarning("Intento de acceso denegado en ObtenerTodos. Auth header inválido o inexistente.");
+            return Unauthorized(new { error = "Acceso denegado" });
+        }
+
         try
         {
             var usuarios = await _repositorio.obtenerUsuariosNotificacionAsync();
@@ -85,8 +113,14 @@ public class UsuariosNotificacionController : ControllerBase
     }
 
     [HttpGet("activos")]
-    public async Task<IActionResult> ListarActivos()
+    public async Task<IActionResult> ListarActivos([FromHeader(Name = "Authorization")] string? authorization)
     {
+        if (!ValidarAutorizacion(authorization))
+        {
+            _logger.LogWarning("Intento de acceso denegado en ListarActivos. Auth header inválido o inexistente.");
+            return Unauthorized(new { error = "Acceso denegado" });
+        }
+
         try
         {
             var usuarios = await _repositorio.listarUsuariosNotificacionActivosAsync();

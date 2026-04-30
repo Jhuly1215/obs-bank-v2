@@ -146,10 +146,12 @@ public class FcmService : IFcmService
                             
                             if (usuarioAfectado != null)
                             {
+                                string tokenMasked = invalidToken.Length > 15 ? invalidToken.Substring(0, 10) + "..." : "invalid";
                                 result.tokensFallidos.Add(new TokenNotificacionFallido
                                 {
                                     codigoAgenda = usuarioAfectado.codigoAgenda,
                                     correo = usuarioAfectado.correo,
+                                    tokenNotificacion = tokenMasked,
                                     motivo = motivo
                                 });
                             }

@@ -29,56 +29,62 @@ public sealed class SqlTokensNotificacionRepositorio : ITokensNotificacionReposi
         }
 
         var codigosAgenda = usuarios.Select(u => u.codigoAgenda).Distinct().ToList();
-
-        // Building the parameter list for the IN clause
-        var parameterNames = codigosAgenda.Select((c, i) => $"@p{i}").ToList();
-        var inClause = string.Join(", ", parameterNames);
-        
-        // PENDIENTE REAL: Confirmar el nombre exacto de la tabla de Econet que contiene:
-        // - codigoAgenda (o CodigoAgenda)
-        // - TokenNotificacion
-        // Placeholder table name: Econet.dbo.TokensAppMovil
-        var query = $@"
-            SELECT 
-                CodigoAgenda AS codigoAgenda, 
-                TokenNotificacion 
-            FROM dbo.TokensAppMovil WITH (NOLOCK)
-            WHERE CodigoAgenda IN ({inClause})
-              AND TokenNotificacion IS NOT NULL
-              AND LTRIM(RTRIM(TokenNotificacion)) <> '';
-        ";
+        var dicTokens = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
         using var connection = new SqlConnection(_connectionString);
-        using var command = new SqlCommand(query, connection);
-
-        for (int i = 0; i < codigosAgenda.Count; i++)
-        {
-            command.Parameters.AddWithValue(parameterNames[i], codigosAgenda[i]);
-        }
-
         await connection.OpenAsync();
-        using var reader = await command.ExecuteReaderAsync();
 
-        var dicTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        while (await reader.ReadAsync())
+        int batchSize = 500;
+        for (int i = 0; i < codigosAgenda.Count; i += batchSize)
         {
-            var codigoAgenda = reader.GetString(reader.GetOrdinal("codigoAgenda"));
-            var tokenNotificacion = reader.GetString(reader.GetOrdinal("TokenNotificacion"));
-            // Keep the first token encountered per code or build a list if required. Overwriting for now.
-            dicTokens[codigoAgenda] = tokenNotificacion;
+            var batch = codigosAgenda.Skip(i).Take(batchSize).ToList();
+            var parameterNames = batch.Select((c, index) => $"@p{index}").ToList();
+            var inClause = string.Join(", ", parameterNames);
+
+            var query = $@"
+                SELECT 
+                    codigoAgenda, 
+                    tokenNotificacion 
+                FROM Econet.dbo.UsuariosNotificacion
+                WHERE estado = 1
+                  AND codigoAgenda IN ({inClause})
+                  AND tokenNotificacion IS NOT NULL
+                  AND LTRIM(RTRIM(tokenNotificacion)) <> '';
+            ";
+
+            using var command = new SqlCommand(query, connection);
+            for (int j = 0; j < batch.Count; j++)
+            {
+                command.Parameters.AddWithValue(parameterNames[j], batch[j]);
+            }
+
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var codigo = reader.GetString(reader.GetOrdinal("codigoAgenda"));
+                var token = reader.GetString(reader.GetOrdinal("tokenNotificacion"));
+                
+                if (!dicTokens.ContainsKey(codigo))
+                {
+                    dicTokens[codigo] = new List<string>();
+                }
+                dicTokens[codigo].Add(token);
+            }
         }
 
         foreach (var usuario in usuarios)
         {
-            if (dicTokens.TryGetValue(usuario.codigoAgenda, out var token))
+            if (dicTokens.TryGetValue(usuario.codigoAgenda, out var tokens))
             {
-                result.Add(new TokenNotificacionUsuario
+                foreach (var token in tokens)
                 {
-                    codigoAgenda = usuario.codigoAgenda,
-                    correo = usuario.correo,
-                    tokenNotificacion = token
-                });
+                    result.Add(new TokenNotificacionUsuario
+                    {
+                        codigoAgenda = usuario.codigoAgenda,
+                        correo = usuario.correo,
+                        tokenNotificacion = token
+                    });
+                }
             }
         }
 

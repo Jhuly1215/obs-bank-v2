@@ -50,3 +50,13 @@ Content-Type: application/json
     "panel": "https://obs.ecofuturo.com.bo/d/.../viewPanel=1"
   }
 }
+
+### Registrar usuario notificacion (SIN TOKEN EN ECONET para probar)
+POST {{Bank.Obs.FcmBridge_HostAddress}}/v1/usuarios-notificacion
+Authorization: Bearer {{BRIDGE_API_KEY}}
+Content-Type: application/json
+
+{
+  "codigoAgenda": "SIN_TOKEN_123",
+  "correo": "sintoken@ecofuturo.com.bo"
+}

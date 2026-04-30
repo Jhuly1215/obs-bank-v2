@@ -2,12 +2,14 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: prometheus
     type: prometheus
     access: proxy
     url: ${PROMETHEUS_URL}
     isDefault: true
 
   - name: Loki
+    uid: loki
     type: loki
     access: proxy
     url: ${LOKI_URL}
@@ -15,6 +17,7 @@ datasources:
       manageAlerts: false
 
   - name: Tempo
+    uid: tempo
     type: tempo
     access: proxy
     url: ${TEMPO_URL}

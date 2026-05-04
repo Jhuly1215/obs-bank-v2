@@ -34,7 +34,12 @@ public class AlertController : ControllerBase
     {
         string apiKey = string.IsNullOrWhiteSpace(_options.apiKey) ? Environment.GetEnvironmentVariable("BRIDGE_API_KEY") ?? "DEV_INSECURE_KEY_REPLACE_ME" : _options.apiKey;
 
-        if (string.IsNullOrWhiteSpace(authorization) || authorization != $"Bearer {apiKey}")
+        if (!string.IsNullOrWhiteSpace(authorization) && authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            authorization = authorization.Substring("Bearer ".Length).Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(authorization) || authorization != apiKey)
         {
             _logger.LogWarning("Intento de acceso denegado en /alert. Auth header inválido o inexistente.");
             return Unauthorized(new { error = "Acceso denegado" });

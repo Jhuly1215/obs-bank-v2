@@ -2,769 +2,637 @@ apiVersion: 1
 
 groups:
   - orgId: 1
-    name: ObsBank Mobile Alerts
+    name: obsbank-core-operacion
     folder: ObsBank
     interval: 1m
     rules:
-      # ==========================================================
-      # 0. PRUEBA CONTROLADA DE PUSH MÓVIL
-      # Activar temporalmente cambiando isPaused: false.
-      # ==========================================================
-      - uid: obsbank_push_test
-        title: ObsBankPushTest
-        condition: C
-        data:
-          - refId: A
-            datasourceUid: prometheus
-            relativeTimeRange:
-              from: 60
-              to: 0
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              expr: vector(1)
-              instant: true
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: A
-
-          - refId: B
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              type: reduce
-              refId: B
-
-          - refId: C
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: B
-              type: threshold
-              conditions:
-                - evaluator:
-                    type: gt
-                    params:
-                      - 0
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - C
-                  reducer:
-                    type: last
-                    params: []
-                  type: query
-              refId: C
-
-        noDataState: OK
-        execErrState: Error
-        for: 30s
-        labels:
-          severity: info
-          service: fcm-bridge
-          channel: mobile
-        annotations:
-          summary: "Prueba móvil FCM"
-          description: "Prueba de Grafana → FcmBridge → Firebase → App móvil."
-          dashboardUrl: "https://obs.ecofuturo.com.bo"
-          panelUrl: "https://obs.ecofuturo.com.bo"
-        isPaused: true
-
-      # ==========================================================
-      # 1. SQL POLLER SIN EJECUCIÓN EXITOSA
-      # ==========================================================
-      - uid: sql_poller_sin_poll_exitoso
-        title: SqlPollerSinPollExitoso
-        condition: C
-        data:
-          - refId: A
-            datasourceUid: prometheus
-            relativeTimeRange:
-              from: 300
-              to: 0
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              expr: (time() - max(sql_poller_last_success_timestamp)) > bool 180
-              instant: true
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: A
-
-          - refId: B
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              type: reduce
-              refId: B
-
-          - refId: C
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: B
-              type: threshold
-              conditions:
-                - evaluator:
-                    type: gt
-                    params:
-                      - 0
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - C
-                  reducer:
-                    type: last
-                    params: []
-                  type: query
-              refId: C
-
+      - uid: obsbank_sql_poller_stale_critical
+        title: SqlPollerStaleCritical
+        condition: B
+        for: 2m
         noDataState: Alerting
-        execErrState: Error
-        for: 2m
+        execErrState: Alerting
+        annotations:
+          summary: "El SQL Poller no reporta éxito reciente"
+          description: "La métrica sql_poller_last_success_timestamp no se actualiza. El stack puede seguir visible, pero los datos dejan de ser confiables."
+          __dashboardUid__: "obsbank-operacion-v33"
+          __panelId__: "1016"
         labels:
           severity: critical
-          service: bank-sql-poller
           channel: mobile
-        annotations:
-          summary: "SQL Poller sin ejecución exitosa"
-          description: "El SQL Poller no registra una ejecución exitosa hace más de 3 minutos."
-          dashboardUrl: "https://obs.ecofuturo.com.bo"
-          panelUrl: "https://obs.ecofuturo.com.bo"
-
-      # ==========================================================
-      # 2. FALLOS CONSECUTIVOS DEL POLLER
-      # ==========================================================
-      - uid: sql_poller_fallos_consecutivos
-        title: SqlPollerFallosConsecutivos
-        condition: C
+          scope: poller
+          component: sql-poller
         data:
           - refId: A
-            datasourceUid: prometheus
             relativeTimeRange:
-              from: 300
+              from: 600
               to: 0
+            datasourceUid: PBFA97CFB590B2093
             model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              expr: max(sql_poller_consecutive_failures) >= bool 3
+              editorMode: code
+              expr: time() - max(sql_poller_last_success_timestamp{service_name="bank-sql-poller"})
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
+              range: false
               refId: A
-
           - refId: B
-            datasourceUid: __expr__
             relativeTimeRange:
               from: 0
               to: 0
+            datasourceUid: __expr__
             model:
+              conditions:
+                - evaluator:
+                    params: [180]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
               datasource:
                 type: __expr__
                 uid: __expr__
               expression: A
-              reducer: last
-              type: reduce
-              refId: B
-
-          - refId: C
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: B
-              type: threshold
-              conditions:
-                - evaluator:
-                    type: gt
-                    params:
-                      - 0
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - C
-                  reducer:
-                    type: last
-                    params: []
-                  type: query
-              refId: C
-
-        noDataState: OK
-        execErrState: Error
-        for: 1m
-        labels:
-          severity: critical
-          service: bank-sql-poller
-          channel: mobile
-        annotations:
-          summary: "Fallos consecutivos en SQL Poller"
-          description: "El SQL Poller acumula 3 o más ciclos fallidos contra la base monitoreada."
-          dashboardUrl: "https://obs.ecofuturo.com.bo"
-          panelUrl: "https://obs.ecofuturo.com.bo"
-
-      # ==========================================================
-      # 3. CERO TRANSACCIONES RECIENTES
-      # Ojo: calibrar por horario. De madrugada puede generar ruido.
-      # ==========================================================
-      - uid: cero_transacciones_15m
-        title: CeroTransaccionesUltimos15Min
-        condition: C
-        data:
-          - refId: A
-            datasourceUid: prometheus
-            relativeTimeRange:
-              from: 900
-              to: 0
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              expr: sum(tx_created_total_15m{source=~"intra|inter"}) == bool 0
-              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
-              refId: A
-
-          - refId: B
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              type: reduce
               refId: B
-
-          - refId: C
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: B
               type: threshold
-              conditions:
-                - evaluator:
-                    type: gt
-                    params:
-                      - 0
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - C
-                  reducer:
-                    type: last
-                    params: []
-                  type: query
-              refId: C
 
+      - uid: obsbank_review_dead_warning
+        title: ReviewDeadWarning
+        condition: B
+        for: 10m
         noDataState: OK
-        execErrState: Error
-        for: 3m
-        labels:
-          severity: critical
-          service: bank-sql-poller
-          channel: mobile
+        execErrState: OK
         annotations:
-          summary: "Cero transacciones recientes"
-          description: "No se detectaron transacciones intra ni interbancarias en los últimos 15 minutos."
-          dashboardUrl: "https://obs.ecofuturo.com.bo"
-          panelUrl: "https://obs.ecofuturo.com.bo"
-
-      # ==========================================================
-      # 4. TRANSACCIONES EN REVISIÓN ESTANCADAS
-      # ==========================================================
-      - uid: transacciones_revision_estancadas
-        title: TransaccionesEnRevisionEstancadas
-        condition: C
-        data:
-          - refId: A
-            datasourceUid: prometheus
-            relativeTimeRange:
-              from: 300
-              to: 0
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              expr: sum(tx_review_dead_count{source=~"intra|inter"}) > bool 0
-              instant: true
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: A
-
-          - refId: B
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              type: reduce
-              refId: B
-
-          - refId: C
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: B
-              type: threshold
-              conditions:
-                - evaluator:
-                    type: gt
-                    params:
-                      - 0
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - C
-                  reducer:
-                    type: last
-                    params: []
-                  type: query
-              refId: C
-
-        noDataState: OK
-        execErrState: Error
-        for: 1m
-        labels:
-          severity: critical
-          service: bank-sql-poller
-          channel: mobile
-        annotations:
-          summary: "Transacciones en revisión estancadas"
-          description: "Existen transacciones en estado de revisión por más tiempo del permitido."
-          dashboardUrl: "https://obs.ecofuturo.com.bo"
-          panelUrl: "https://obs.ecofuturo.com.bo"
-
-      # ==========================================================
-      # 5. BACKLOG OPERATIVO MAYOR A 15 MINUTOS
-      # ==========================================================
-      - uid: backlog_operativo_mayor_15m
-        title: BacklogOperativoMayor15Min
-        condition: C
-        data:
-          - refId: A
-            datasourceUid: prometheus
-            relativeTimeRange:
-              from: 900
-              to: 0
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              expr: sum(tx_pending_aging_bucket_count{bucket="ge_900s"}) > bool 0
-              instant: true
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: A
-
-          - refId: B
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              type: reduce
-              refId: B
-
-          - refId: C
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: B
-              type: threshold
-              conditions:
-                - evaluator:
-                    type: gt
-                    params:
-                      - 0
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - C
-                  reducer:
-                    type: last
-                    params: []
-                  type: query
-              refId: C
-
-        noDataState: OK
-        execErrState: Error
-        for: 2m
+          summary: "Existen transacciones en review > 5 min"
+          description: "Hay al menos una transacción estancada en estado 100 por más de 5 minutos."
+          __dashboardUid__: "obsbank-operacion-v33"
+          __panelId__: "1010"
         labels:
           severity: warning
-          service: bank-sql-poller
-          channel: mobile
-        annotations:
-          summary: "Backlog operativo mayor a 15 minutos"
-          description: "Hay transacciones pendientes con antigüedad superior a 15 minutos."
-          dashboardUrl: "https://obs.ecofuturo.com.bo"
-          panelUrl: "https://obs.ecofuturo.com.bo"
-
-      # ==========================================================
-      # 6. BACKLOG OPERATIVO MAYOR A 4 HORAS
-      # ==========================================================
-      - uid: backlog_operativo_mayor_4h
-        title: BacklogOperativoMayor4Horas
-        condition: C
+          scope: review
+          component: operacion
         data:
           - refId: A
-            datasourceUid: prometheus
             relativeTimeRange:
-              from: 14400
+              from: 900
               to: 0
+            datasourceUid: PBFA97CFB590B2093
             model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              expr: sum(tx_pending_aging_bucket_count{bucket="ge_14400s"}) > bool 0
+              editorMode: code
+              expr: sum(max by (source) (tx_review_dead_count{service_name="bank-sql-poller"}))
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
+              range: false
               refId: A
-
           - refId: B
-            datasourceUid: __expr__
             relativeTimeRange:
               from: 0
               to: 0
+            datasourceUid: __expr__
             model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: gte
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
               datasource:
                 type: __expr__
                 uid: __expr__
               expression: A
-              reducer: last
-              type: reduce
-              refId: B
-
-          - refId: C
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: B
-              type: threshold
-              conditions:
-                - evaluator:
-                    type: gt
-                    params:
-                      - 0
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - C
-                  reducer:
-                    type: last
-                    params: []
-                  type: query
-              refId: C
-
-        noDataState: OK
-        execErrState: Error
-        for: 1m
-        labels:
-          severity: critical
-          service: bank-sql-poller
-          channel: mobile
-        annotations:
-          summary: "Backlog operativo mayor a 4 horas"
-          description: "Hay transacciones pendientes con antigüedad superior a 4 horas."
-          dashboardUrl: "https://obs.ecofuturo.com.bo"
-          panelUrl: "https://obs.ecofuturo.com.bo"
-
-      # ==========================================================
-      # 7. FALLAS TÉCNICAS EN 24 HORAS
-      # ==========================================================
-      - uid: fallas_tecnicas_24h
-        title: FallasTecnicasElevadas24h
-        condition: C
-        data:
-          - refId: A
-            datasourceUid: prometheus
-            relativeTimeRange:
-              from: 86400
-              to: 0
-            model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              expr: sum(tx_failed_technical_count_24h{source=~"intra|inter"}) > bool 10
-              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
-              refId: A
-
-          - refId: B
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: A
-              reducer: last
-              type: reduce
               refId: B
-
-          - refId: C
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: B
               type: threshold
-              conditions:
-                - evaluator:
-                    type: gt
-                    params:
-                      - 0
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - C
-                  reducer:
-                    type: last
-                    params: []
-                  type: query
-              refId: C
 
-        noDataState: OK
-        execErrState: Error
+      - uid: obsbank_review_dead_critical
+        title: ReviewDeadCritical
+        condition: B
         for: 5m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Review crítico acumulado"
+          description: "Existen 3 o más transacciones en estado 100 con antigüedad mayor a 5 minutos."
+          __dashboardUid__: "obsbank-operacion-v33"
+          __panelId__: "1010"
         labels:
           severity: critical
-          service: bank-sql-poller
           channel: mobile
-        annotations:
-          summary: "Fallas técnicas elevadas"
-          description: "Se detectaron más de 10 fallas técnicas en las últimas 24 horas."
-          dashboardUrl: "https://obs.ecofuturo.com.bo"
-          panelUrl: "https://obs.ecofuturo.com.bo"
-
-      # ==========================================================
-      # 8. LATENCIA P95 ALTA
-      # ==========================================================
-      - uid: latencia_p95_alta
-        title: LatenciaP95Alta
-        condition: C
+          scope: review
+          component: operacion
         data:
           - refId: A
-            datasourceUid: prometheus
             relativeTimeRange:
-              from: 900
+              from: 600
               to: 0
+            datasourceUid: PBFA97CFB590B2093
             model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              expr: max(tx_success_p95_seconds{source=~"intra|inter"}) > bool 60
+              editorMode: code
+              expr: sum(max by (source) (tx_review_dead_count{service_name="bank-sql-poller"}))
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
+              range: false
               refId: A
-
           - refId: B
-            datasourceUid: __expr__
             relativeTimeRange:
               from: 0
               to: 0
+            datasourceUid: __expr__
             model:
+              conditions:
+                - evaluator:
+                    params: [3]
+                    type: gte
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
               datasource:
                 type: __expr__
                 uid: __expr__
               expression: A
-              reducer: last
-              type: reduce
+              intervalMs: 1000
+              maxDataPoints: 43200
               refId: B
-
-          - refId: C
-            datasourceUid: __expr__
-            relativeTimeRange:
-              from: 0
-              to: 0
-            model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: B
               type: threshold
-              conditions:
-                - evaluator:
-                    type: gt
-                    params:
-                      - 0
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - C
-                  reducer:
-                    type: last
-                    params: []
-                  type: query
-              refId: C
 
-        noDataState: OK
-        execErrState: Error
+      - uid: obsbank_review_max_age_critical
+        title: ReviewMaxAgeCritical
+        condition: B
         for: 5m
-        labels:
-          severity: warning
-          service: bank-sql-poller
-          channel: mobile
+        noDataState: OK
+        execErrState: OK
         annotations:
-          summary: "Latencia p95 alta"
-          description: "La latencia p95 de transacciones exitosas supera 60 segundos."
-          dashboardUrl: "https://obs.ecofuturo.com.bo"
-          panelUrl: "https://obs.ecofuturo.com.bo"
-
-      # ==========================================================
-      # 9. ANOMALÍAS DE CALIDAD DE DATOS
-      # ==========================================================
-      - uid: anomalias_calidad_datos
-        title: AnomaliasCalidadDatos
-        condition: C
+          summary: "La antigüedad máxima de review es crítica"
+          description: "La métrica tx_review_max_age_seconds supera 300 segundos."
+          __dashboardUid__: "obsbank-estados-aging-v33"
+          __panelId__: "2011"
+        labels:
+          severity: critical
+          channel: mobile
+          scope: review
+          component: aging
         data:
           - refId: A
-            datasourceUid: prometheus
             relativeTimeRange:
-              from: 900
+              from: 600
               to: 0
+            datasourceUid: PBFA97CFB590B2093
             model:
-              datasource:
-                type: prometheus
-                uid: prometheus
-              expr: sum(tx_quality_anomaly_count{source=~"intra|inter"}) > bool 0
+              editorMode: code
+              expr: max(tx_review_max_age_seconds{service_name="bank-sql-poller"})
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
+              range: false
               refId: A
-
           - refId: B
-            datasourceUid: __expr__
             relativeTimeRange:
               from: 0
               to: 0
+            datasourceUid: __expr__
             model:
+              conditions:
+                - evaluator:
+                    params: [300]
+                    type: gte
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
               datasource:
                 type: __expr__
                 uid: __expr__
               expression: A
-              reducer: last
-              type: reduce
+              intervalMs: 1000
+              maxDataPoints: 43200
               refId: B
+              type: threshold
 
-          - refId: C
-            datasourceUid: __expr__
+      - uid: obsbank_intra_error_rate_warning
+        title: IntraErrorRateWarning
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Error rate intra elevado"
+          description: "El porcentaje de error intra 24h es mayor o igual a 1%."
+          __dashboardUid__: "obsbank-operacion-v33"
+          __panelId__: "1006"
+        labels:
+          severity: warning
+          scope: operacion
+          source: intra
+          component: negocio
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              editorMode: code
+              expr: 100 * max(tx_error_count_24h{service_name="bank-sql-poller",source="intra"}) / clamp_min(max(tx_created_total_24h{service_name="bank-sql-poller",source="intra"}),1)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
             relativeTimeRange:
               from: 0
               to: 0
+            datasourceUid: __expr__
             model:
-              datasource:
-                type: __expr__
-                uid: __expr__
-              expression: B
-              type: threshold
               conditions:
                 - evaluator:
-                    type: gt
-                    params:
-                      - 0
+                    params: [1]
+                    type: gte
                   operator:
                     type: and
                   query:
-                    params:
-                      - C
+                    params: [A]
                   reducer:
-                    type: last
                     params: []
+                    type: last
                   type: query
-              refId: C
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: threshold
 
+      - uid: obsbank_intra_error_rate_critical
+        title: IntraErrorRateCritical
+        condition: B
+        for: 10m
         noDataState: OK
-        execErrState: Error
-        for: 2m
+        execErrState: OK
+        annotations:
+          summary: "Error rate intra crítico"
+          description: "El porcentaje de error intra 24h es mayor o igual a 2%."
+          __dashboardUid__: "obsbank-operacion-v33"
+          __panelId__: "1006"
+        labels:
+          severity: critical
+          channel: mobile
+          scope: operacion
+          source: intra
+          component: negocio
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              editorMode: code
+              expr: 100 * max(tx_error_count_24h{service_name="bank-sql-poller",source="intra"}) / clamp_min(max(tx_created_total_24h{service_name="bank-sql-poller",source="intra"}),1)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [2]
+                    type: gte
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: threshold
+
+      - uid: obsbank_inter_error_rate_warning
+        title: InterErrorRateWarning
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Error rate inter elevado"
+          description: "El porcentaje de error inter 24h es mayor o igual a 0.5%."
+          __dashboardUid__: "obsbank-operacion-v33"
+          __panelId__: "1007"
         labels:
           severity: warning
-          service: bank-sql-poller
-          channel: mobile
+          scope: operacion
+          source: inter
+          component: negocio
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              editorMode: code
+              expr: 100 * max(tx_error_count_24h{service_name="bank-sql-poller",source="inter"}) / clamp_min(max(tx_created_total_24h{service_name="bank-sql-poller",source="inter"}),1)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0.5]
+                    type: gte
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: threshold
+
+      - uid: obsbank_inter_error_rate_critical
+        title: InterErrorRateCritical
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: OK
         annotations:
-          summary: "Anomalías de calidad de datos"
-          description: "Se detectaron anomalías de calidad en transacciones recientes."
-          dashboardUrl: "https://obs.ecofuturo.com.bo"
-          panelUrl: "https://obs.ecofuturo.com.bo"
+          summary: "Error rate inter crítico"
+          description: "El porcentaje de error inter 24h es mayor o igual a 1%."
+          __dashboardUid__: "obsbank-operacion-v33"
+          __panelId__: "1007"
+        labels:
+          severity: critical
+          channel: mobile
+          scope: operacion
+          source: inter
+          component: negocio
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              editorMode: code
+              expr: 100 * max(tx_error_count_24h{service_name="bank-sql-poller",source="inter"}) / clamp_min(max(tx_created_total_24h{service_name="bank-sql-poller",source="inter"}),1)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: gte
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: threshold
+
+      - uid: obsbank_pending_oldest_warning
+        title: PendingOldestWarning
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Existe backlog con antigüedad elevada"
+          description: "La transacción pendiente más antigua supera 3600 segundos."
+          __dashboardUid__: "obsbank-estados-aging-v33"
+          __panelId__: "2012"
+        labels:
+          severity: warning
+          scope: aging
+          component: backlog
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              editorMode: code
+              expr: max(tx_pending_oldest_seconds{service_name="bank-sql-poller"})
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [3600]
+                    type: gte
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: threshold
+
+      - uid: obsbank_pending_oldest_critical
+        title: PendingOldestCritical
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Existe backlog con antigüedad crítica"
+          description: "La transacción pendiente más antigua supera 14400 segundos."
+          __dashboardUid__: "obsbank-estados-aging-v33"
+          __panelId__: "2012"
+        labels:
+          severity: critical
+          channel: mobile
+          scope: aging
+          component: backlog
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1200
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              editorMode: code
+              expr: max(tx_pending_oldest_seconds{service_name="bank-sql-poller"})
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [14400]
+                    type: gte
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: threshold
+
+      - uid: obsbank_data_quality_warning
+        title: DataQualityWarning
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Se detectaron anomalías de calidad de dato"
+          description: "Existen registros con missing modification, zero duration o negative duration en la ventana 24h."
+          __dashboardUid__: "obsbank-estados-aging-v33"
+          __panelId__: "2029"
+        labels:
+          severity: warning
+          scope: calidad
+          component: datos
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              editorMode: code
+              expr: |
+                sum(max by (source,tipo,estado) (tx_quality_missing_mod_count_24h{service_name="bank-sql-poller"}))
+                +
+                sum(max by (source,tipo,estado) (tx_quality_zero_duration_count_24h{service_name="bank-sql-poller"}))
+                +
+                sum(max by (source,tipo,estado) (tx_quality_negative_duration_count_24h{service_name="bank-sql-poller"}))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: threshold

@@ -31,7 +31,13 @@ public class UsuariosNotificacionController : ControllerBase
     private bool ValidarAutorizacion(string? authorization)
     {
         string apiKey = string.IsNullOrWhiteSpace(_options.apiKey) ? Environment.GetEnvironmentVariable("BRIDGE_API_KEY") ?? "DEV_INSECURE_KEY_REPLACE_ME" : _options.apiKey;
-        return !string.IsNullOrWhiteSpace(authorization) && authorization == $"Bearer {apiKey}";
+        
+        if (!string.IsNullOrWhiteSpace(authorization) && authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            authorization = authorization.Substring("Bearer ".Length).Trim();
+        }
+
+        return !string.IsNullOrWhiteSpace(authorization) && authorization == apiKey;
     }
 
     [HttpPost]

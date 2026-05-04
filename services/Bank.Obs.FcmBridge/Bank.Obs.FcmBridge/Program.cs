@@ -31,19 +31,17 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Bank.Obs.FcmBridge API", Version = "v1" });
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
+        Type = SecuritySchemeType.ApiKey,
         In = ParameterLocation.Header,
-        Description = "Ingresa tu token en el formato: Bearer secreto_123_cambiar_en_produccion"
+        Description = "Ingresa tu clave de API (Ej: DEV_INSECURE_KEY_REPLACE_ME)"
     });
     c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecuritySchemeReference("Bearer", document),
+            new OpenApiSecuritySchemeReference("ApiKey", document),
             []
         }
     });

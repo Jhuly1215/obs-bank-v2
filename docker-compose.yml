@@ -195,13 +195,18 @@ services:
       context: ./services/Bank.Obs.FcmBridge/Bank.Obs.FcmBridge
       dockerfile: Dockerfile
     environment:
+      ASPNETCORE_URLS: http://+:5050
       GOOGLE_APPLICATION_CREDENTIALS: /etc/secrets/firebase-service-account.json
       BRIDGE_API_KEY: "${BRIDGE_API_KEY}"
-      ConnectionStrings__EcoMonitorDb: "${ECOMONITOR_DB_CONN}"
+      ConnectionStrings__EcoMonitorDb: "${SQLSERVER_CONN}"
       ConnectionStrings__EconetDb: "${ECONET_DB_CONN}"
+    ports:
+      - "${FCM_BRIDGE_PORT:-5050}:5050"
     volumes:
       - ./observability/certs/firebase-service-account.json:/etc/secrets/firebase-service-account.json:ro
     networks: [ obs ]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
   openldap:

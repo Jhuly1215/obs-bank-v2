@@ -35,7 +35,7 @@ services:
   # =========================
   otel-collector:
     image: otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION}
-    command: [ "--config=/etc/otelcol/config.yml" ]
+    command: ["--config=/etc/otelcol/config.yml"]
     environment:
       LOKI_URL: "${LOKI_URL}"
       TEMPO_URL: "${TEMPO_URL}"
@@ -44,7 +44,7 @@ services:
     ports:
       - "4317:4317"
       - "4318:4318"
-    networks: [ obs ]
+    networks: [obs]
 
   prometheus:
     image: prom/prometheus:${PROMETHEUS_VERSION}
@@ -57,7 +57,7 @@ services:
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./data/prometheus:/prometheus
-    networks: [ obs ]
+    networks: [obs]
 
   loki:
     image: grafana/loki:${LOKI_VERSION}
@@ -69,7 +69,7 @@ services:
     volumes:
       - ./observability/loki-config.yml:/etc/loki/config.yml:ro
       - ./data/loki:/loki
-    networks: [ obs ]
+    networks: [obs]
 
   tempo:
     image: grafana/tempo:${TEMPO_VERSION}
@@ -86,7 +86,7 @@ services:
     volumes:
       - ./observability/tempo.yml:/etc/tempo.yaml:ro
       - ./data/tempo:/var/tempo
-    networks: [ obs ]
+    networks: [obs]
 
   grafana:
     image: grafana/grafana:${GRAFANA_VERSION}
@@ -125,7 +125,7 @@ services:
         condition: service_started
       tempo:
         condition: service_started
-    networks: [ obs ]
+    networks: [obs]
 
   alloy:
     image: grafana/alloy:${ALLOY_VERSION}
@@ -143,7 +143,7 @@ services:
       - ./data/alloy:/var/lib/alloy/data
     depends_on:
       - loki
-    networks: [ obs ]
+    networks: [obs]
 
   demo-api:
     profiles: ["demo"]
@@ -161,7 +161,7 @@ services:
       - "${DEMO_API_PORT:-5000}:8080"
     depends_on:
       - otel-collector
-    networks: [ obs ]
+    networks: [obs]
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -177,17 +177,17 @@ services:
       OpenTelemetry__ServiceVersion: "${SQL_POLLER_VERSION}"
     depends_on:
       - otel-collector
-    networks: [ obs ]
+    networks: [obs]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
   redis:
     image: redis:${REDIS_VERSION}
-    command: [ "redis-server", "--appendonly", "yes" ]
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - ./data/redis:/data
-    networks: [ obs ]
+    networks: [obs]
     restart: unless-stopped
 
   fcm-bridge:
@@ -204,7 +204,7 @@ services:
       - "${FCM_BRIDGE_PORT:-5050}:5050"
     volumes:
       - ./observability/certs/firebase-service-account.json:/etc/secrets/firebase-service-account.json:ro
-    networks: [ obs ]
+    networks: [obs]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -216,7 +216,7 @@ services:
     environment:
       - LDAP_DOMAIN=${LDAP_DOMAIN}
       - LDAP_ADMIN_PASSWORD=${LDAP_BIND_PASSWORD}
-    networks: [ obs ]
+    networks: [obs]
 
 networks:
   obs:

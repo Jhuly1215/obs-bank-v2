@@ -61,19 +61,6 @@ public sealed class SqlMetricsWorker : BackgroundService
                     snap.InterTxCreated15m, snap.InterPendingCount24h, snap.InterErrorCount24h, snap.InterPendingOldestSec,
                     sw.ElapsedMilliseconds);
 
-                // Agregar un Warning simulado o condicional para efectos de prueba de Observabilidad
-                if (snap.IntraPendingCount24h > 100 || snap.InterPendingCount24h > 100)
-                {
-                    _logger.LogWarning("Nivel de transacciones pendientes elevado en las últimas 24h. Intra: {IntraPending}, Inter: {InterPending}", snap.IntraPendingCount24h, snap.InterPendingCount24h);
-                }
-                else 
-                {
-                    // Simulando una advertencia ocasional
-                    if (DateTime.UtcNow.Minute % 5 == 0)
-                    {
-                        _logger.LogWarning("Revisión periódica de rendimiento (cada 5 min). La conexión a la BD está operando normalmente.");
-                    }
-                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

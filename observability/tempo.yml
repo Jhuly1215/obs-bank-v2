@@ -15,6 +15,8 @@ storage:
     backend: local
     local:
       path: ${TEMPO_STORAGE_DIR}/traces
+    wal:
+      path: ${TEMPO_STORAGE_DIR}/wal
 
 compactor:
   compaction:
@@ -24,10 +26,24 @@ querier:
   frontend_worker:
     frontend_address: 127.0.0.1:${TEMPO_FRONTEND_PORT}
 
+query_frontend:
+  search:
+    duration_slo: 5s
+    throughput_bytes_slo: 1.073741824e+09
+  trace_by_id:
+    duration_slo: 5s
+  metrics:
+    max_duration: 3h
+
 metrics_generator:
   registry:
     external_labels:
       source: tempo
+  processor:
+    local_blocks:
+      flush_to_storage: true
+  traces_storage:
+    path: ${TEMPO_STORAGE_DIR}/generator/traces
   storage:
     path: ${TEMPO_STORAGE_DIR}/generator/wal
     remote_write:

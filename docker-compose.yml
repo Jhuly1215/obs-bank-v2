@@ -111,6 +111,8 @@ services:
       GF_AUTH_LDAP_ENABLED: "true"
       GF_AUTH_LDAP_CONFIG_FILE: "/etc/grafana/ldap.toml"
       GF_AUTH_LDAP_ALLOW_SIGN_UP: "true"
+      # API Keys for provisioned contact points
+      BRIDGE_API_KEY: "${BRIDGE_API_KEY}"
     volumes:
       - ./observability/grafana/data:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -200,6 +202,9 @@ services:
       BRIDGE_API_KEY: "${BRIDGE_API_KEY}"
       ConnectionStrings__EcoMonitorDb: "${SQLSERVER_CONN}"
       ConnectionStrings__EconetDb: "${ECONET_DB_CONN}"
+      OpenTelemetry__OtlpEndpoint: "${OTEL_COLLECTOR_URL}"
+      OpenTelemetry__ServiceName: bank-fcm-bridge
+      OpenTelemetry__ServiceVersion: "1.0.0"
     ports:
       - "${FCM_BRIDGE_PORT:-5050}:5050"
     volumes:

@@ -9,17 +9,28 @@ using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- Logging (Serilog structured JSON) ---
+// --- Metadata ---
+var meta = ServiceMetadata.FromConfiguration(builder.Configuration);
+
+// --- Logging (Serilog structured JSON + OTLP) ---
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .Enrich.FromLogContext()
     .WriteTo.Console(new CompactJsonFormatter())
+    .WriteTo.OpenTelemetry(options =>
+    {
+        options.Endpoint = meta.OtlpEndpoint.ToString();
+        options.ResourceAttributes = new Dictionary<string, object>
+        {
+            ["service.name"] = meta.Name,
+            ["service_name"] = meta.Name,
+            ["service.version"] = meta.Version
+        };
+    })
     .CreateLogger();
 
 builder.Host.UseSerilog();
 
-// --- Metadata ---
-var meta = ServiceMetadata.FromConfiguration(builder.Configuration);
 
 // --- Observability (OpenTelemetry) ---
 builder.AddObservability(meta);

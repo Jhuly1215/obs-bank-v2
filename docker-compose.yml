@@ -61,7 +61,7 @@ services:
 
   loki:
     image: grafana/loki:${LOKI_VERSION}
-    command: 
+    command:
       - -config.file=/etc/loki/config.yml
       - -config.expand-env=true
     environment:
@@ -73,7 +73,7 @@ services:
 
   tempo:
     image: grafana/tempo:${TEMPO_VERSION}
-    command: 
+    command:
       - -config.file=/etc/tempo.yaml
       - -config.expand-env=true
     environment:
@@ -117,7 +117,6 @@ services:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./deploy/prod/config/ldap.toml:/etc/grafana/ldap.toml:ro
-      - ./observability/certs/ca-banco.pem:/etc/ssl/certs/ca-banco.pem:ro
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:

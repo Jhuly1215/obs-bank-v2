@@ -232,7 +232,7 @@ public sealed class SqlMetrics : System.IDisposable
 
     // --- Tabular Mapping ---
     
-    private IEnumerable<Measurement<int>> MapStates(IReadOnlyList<SqlPollingClient.StateCountRow> intra, IReadOnlyList<SqlPollingClient.StateCountRow> inter)
+    private IEnumerable<Measurement<int>> MapStates(IReadOnlyList<StateCountRow> intra, IReadOnlyList<StateCountRow> inter)
     {
         var s = _state.Current;
         if (intra != null) foreach(var x in intra) yield return new Measurement<int>(x.Count, Tags(s, "intra", "estado", x.Estado.ToString()));
@@ -258,42 +258,42 @@ public sealed class SqlMetrics : System.IDisposable
         }
     }
 
-    private IEnumerable<Measurement<int>> MapAgeStat(IReadOnlyList<SqlPollingClient.AgeStatsRow> intra, IReadOnlyList<SqlPollingClient.AgeStatsRow> inter, bool avg)
+    private IEnumerable<Measurement<int>> MapAgeStat(IReadOnlyList<AgeStatsRow> intra, IReadOnlyList<AgeStatsRow> inter, bool avg)
     {
         var s = _state.Current;
         if (intra != null) foreach(var x in intra) yield return new Measurement<int>(avg ? x.AvgSec : x.MaxSec, Tags(s, "intra", "estado", x.Estado.ToString()));
         if (inter != null) foreach(var x in inter) yield return new Measurement<int>(avg ? x.AvgSec : x.MaxSec, Tags(s, "inter", "estado", x.Estado.ToString()));
     }
 
-    private IEnumerable<Measurement<int>> MapFailures(SqlPollingClient.FailuresRow intra, SqlPollingClient.FailuresRow inter, bool rejected)
+    private IEnumerable<Measurement<int>> MapFailures(FailuresRow intra, FailuresRow inter, bool rejected)
     {
         var s = _state.Current;
         if (intra != null) yield return new Measurement<int>(rejected ? intra.Rejected : intra.FailedTechnical, Tags(s, "intra"));
         if (inter != null) yield return new Measurement<int>(rejected ? inter.Rejected : inter.FailedTechnical, Tags(s, "inter"));
     }
 
-    private IEnumerable<Measurement<int>> MapTypeCount(IReadOnlyList<SqlPollingClient.TypeCountRow> intra, IReadOnlyList<SqlPollingClient.TypeCountRow> inter)
+    private IEnumerable<Measurement<int>> MapTypeCount(IReadOnlyList<TypeCountRow> intra, IReadOnlyList<TypeCountRow> inter)
     {
         var s = _state.Current;
         if (intra != null) foreach(var x in intra) yield return new(x.Count, Tags(s, "intra", "tipo", x.Tipo.ToString()));
         if (inter != null) foreach(var x in inter) yield return new(x.Count, Tags(s, "inter", "tipo", x.Tipo.ToString()));
     }
 
-    private IEnumerable<Measurement<double>> MapAmountTotal(IReadOnlyList<SqlPollingClient.AmountTotalRow> intra, IReadOnlyList<SqlPollingClient.AmountTotalRow> inter)
+    private IEnumerable<Measurement<double>> MapAmountTotal(IReadOnlyList<AmountTotalRow> intra, IReadOnlyList<AmountTotalRow> inter)
     {
         var s = _state.Current;
         if (intra != null) foreach(var x in intra) yield return new(x.Total, Tags(s, "intra", "moneda", x.Moneda.ToString()));
         if (inter != null) foreach(var x in inter) yield return new(x.Total, Tags(s, "inter", "moneda", x.Moneda.ToString()));
     }
 
-    private IEnumerable<Measurement<double>> MapAmountByType(IReadOnlyList<SqlPollingClient.AmountByTypeRow> intra, IReadOnlyList<SqlPollingClient.AmountByTypeRow> inter)
+    private IEnumerable<Measurement<double>> MapAmountByType(IReadOnlyList<AmountByTypeRow> intra, IReadOnlyList<AmountByTypeRow> inter)
     {
         var s = _state.Current;
         if (intra != null) foreach(var x in intra) yield return new(x.Total, Tags(s, "intra", "tipo", x.Tipo.ToString(), "moneda", x.Moneda.ToString()));
         if (inter != null) foreach(var x in inter) yield return new(x.Total, Tags(s, "inter", "tipo", x.Tipo.ToString(), "moneda", x.Moneda.ToString()));
     }
 
-    private IEnumerable<Measurement<int>> MapSpeedStat(IReadOnlyList<SqlPollingClient.SpeedStatsRow> intra, IReadOnlyList<SqlPollingClient.SpeedStatsRow> inter, bool avg)
+    private IEnumerable<Measurement<int>> MapSpeedStat(IReadOnlyList<SpeedStatsRow> intra, IReadOnlyList<SpeedStatsRow> inter, bool avg)
     {
         var s = _state.Current;
         if (intra != null) foreach(var x in intra) yield return new Measurement<int>(avg ? x.AvgSec : x.P95Sec, Tags(s, "intra", "tipo", x.Tipo.ToString()));
@@ -382,19 +382,19 @@ public sealed class SqlMetrics : System.IDisposable
         new Measurement<int>(s.InterCompensatedCurrentCount, Tags(s, "inter"))});
 
     // Helpers
-    private IEnumerable<Measurement<int>> SafeGen(System.Func<SqlPollingClient.Snapshot, IEnumerable<Measurement<int>>> generator)
+    private IEnumerable<Measurement<int>> SafeGen(System.Func<Snapshot, IEnumerable<Measurement<int>>> generator)
     {
         var snapshot = _state.Current;
         return snapshot == null ? Enumerable.Empty<Measurement<int>>() : generator(snapshot);
     }
 
-    private IEnumerable<Measurement<double>> SnapshotSafeGen(System.Func<SqlPollingClient.Snapshot, IEnumerable<Measurement<double>>> generator)
+    private IEnumerable<Measurement<double>> SnapshotSafeGen(System.Func<Snapshot, IEnumerable<Measurement<double>>> generator)
     {
         var snapshot = _state.Current;
         return snapshot == null ? Enumerable.Empty<Measurement<double>>() : generator(snapshot);
     }
     
-    private KeyValuePair<string, object?>[] Tags(SqlPollingClient.Snapshot? s, string? source = null, string? k1 = null, string? v1 = null, string? k2 = null, string? v2 = null, string? k3 = null, string? v3 = null)
+    private KeyValuePair<string, object?>[] Tags(Snapshot? s, string? source = null, string? k1 = null, string? v1 = null, string? k2 = null, string? v2 = null, string? k3 = null, string? v3 = null)
     {
         var list = new List<KeyValuePair<string, object?>>();
         if (s != null) list.Add(new("tipo_dia", s.DayType));

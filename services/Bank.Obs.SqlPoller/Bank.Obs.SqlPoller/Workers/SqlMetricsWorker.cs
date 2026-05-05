@@ -16,14 +16,14 @@ public sealed class SqlMetricsWorker : BackgroundService
     private readonly IConfiguration _config;
     private readonly ILogger<SqlMetricsWorker> _logger;
     private readonly MetricState _state;
-    private readonly SqlPollingClient _poller;
+    private readonly SnapshotPollingService _poller;
     private readonly SqlMetrics _metrics;
 
     public SqlMetricsWorker(
         IConfiguration config,
         ILogger<SqlMetricsWorker> logger,
         MetricState state,
-        SqlPollingClient poller,
+        SnapshotPollingService poller,
         SqlMetrics metrics)
     {
         _config = config;

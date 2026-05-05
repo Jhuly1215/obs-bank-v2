@@ -99,11 +99,6 @@ services:
       - ${PROD_LOGS_PATH:-/var/log/banco}:/var/log/bank-apis:ro
       - ./deploy/prod/config/alloy.alloy:/etc/alloy/config.alloy:ro
 
-  demo-api:
-    ports: []
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Production
 
   sql-poller:
     restart: unless-stopped

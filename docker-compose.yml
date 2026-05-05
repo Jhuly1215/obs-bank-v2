@@ -146,6 +146,7 @@ services:
     networks: [ obs ]
 
   demo-api:
+    profiles: ["demo"]
     build:
       context: ./services/Bank.Obs.DemoApi/Bank.Obs.DemoApi
       dockerfile: Dockerfile

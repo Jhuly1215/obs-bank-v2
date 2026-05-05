@@ -120,8 +120,8 @@ services:
 
   openldap:
     environment:
-      - LDAP_DOMAIN=${LDAP_DOMAIN:-planetexpress.com}
-      - LDAP_ADMIN_PASSWORD=${LDAP_BIND_PASSWORD:-GoodNewsEveryone}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_ADMIN_PASSWORD=${LDAP_BIND_PASSWORD}
       - LDAP_TLS=false
       - LDAP_REMOVE_CONFIG_AFTER_SETUP=false
       - LDAP_RFC2307BIS_SCHEMA=true

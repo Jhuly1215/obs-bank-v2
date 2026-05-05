@@ -90,7 +90,6 @@ services:
 
   grafana:
     image: grafana/grafana:${GRAFANA_VERSION}
-    container_name: grafana
     restart: unless-stopped
     environment:
       # Grafana expande variables en grafana.ini automáticamente
@@ -137,9 +136,10 @@ services:
       - /etc/alloy/config.alloy
     environment:
       LOKI_URL: "${LOKI_URL}"
+      ALLOY_ENV: "${ASPNETCORE_ENVIRONMENT:-local}"
     volumes:
       - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - ./sample-logs:/var/log/bank-apis:ro
+      - ${BANK_LOGS_PATH:-./sample-logs}:/var/log/bank-apis:ro
       - ./data/alloy:/var/lib/alloy/data
     depends_on:
       - loki
@@ -155,7 +155,7 @@ services:
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT}"
       SQLSERVER_CONN: "${SQLSERVER_CONN}"
       OpenTelemetry__OtlpEndpoint: "${OTEL_COLLECTOR_URL}"
-      OpenTelemetry__ServiceName: bank-obs-demo-api
+      OpenTelemetry__ServiceName: "${DEMO_API_NAME:-bank-obs-demo-api}"
       OpenTelemetry__ServiceVersion: "${DEMO_API_VERSION}"
     ports:
       - "${DEMO_API_PORT:-5000}:8080"
@@ -173,7 +173,7 @@ services:
       SqlPoller__ConnectionString: "${SQLSERVER_CONN}"
       SqlPoller__IntervalSeconds: "${SQL_POLLER_INTERVAL}"
       OpenTelemetry__OtlpEndpoint: "${OTEL_COLLECTOR_URL}"
-      OpenTelemetry__ServiceName: bank-sql-poller
+      OpenTelemetry__ServiceName: "${SQL_POLLER_NAME:-bank-sql-poller}"
       OpenTelemetry__ServiceVersion: "${SQL_POLLER_VERSION}"
     depends_on:
       - otel-collector
@@ -210,13 +210,12 @@ services:
     restart: unless-stopped
 
   openldap:
-    image: osixia/openldap:1.4.0
-    container_name: obs-bank-v2-ldap-1
+    image: osixia/openldap:${OPENLDAP_VERSION:-1.4.0}
     ports:
       - "${LDAP_PORT:-389}:389"
     environment:
-      - LDAP_DOMAIN=${LDAP_DOMAIN:-planetexpress.com}
-      - LDAP_ADMIN_PASSWORD=${LDAP_BIND_PASSWORD:-GoodNewsEveryone}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_ADMIN_PASSWORD=${LDAP_BIND_PASSWORD}
     networks: [ obs ]
 
 networks:

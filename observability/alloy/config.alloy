@@ -74,6 +74,6 @@ loki.write "default" {
   }
   external_labels = {
     source = "alloy-file",
-    env    = "demo",
+    env    = coalesce(sys.env("ALLOY_ENV"), "local"),
   }
 }

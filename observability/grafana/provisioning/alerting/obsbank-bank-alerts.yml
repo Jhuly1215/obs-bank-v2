@@ -9,7 +9,7 @@ groups:
       - uid: ob_ib_bank_err_warn
         title: InterbankBankErrorRateWarning
         condition: B
-        for: 10m
+        for: 0m
         noDataState: OK
         execErrState: OK
         annotations:

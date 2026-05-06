@@ -19,7 +19,7 @@ discovery.relabel "labeled_logs" {
 		source_labels = ["__path__"]
 		regex         = "/var/log/bank-apis/([^/]+)/.*"
 		replacement   = "$1"
-		target_label  = "service_name"
+		target_label  = "service"
 	}
 }
 
@@ -36,10 +36,35 @@ loki.process "unified_logs" {
 	stage.json {
 		expressions = {
 			timestamp = "\"@t\"",
+			timestamp2 = "Timestamp",
 			level     = "\"@l\"",
+			level2    = "Level",
 			msg       = "\"@mt\"",
+			msg2      = "MessageTemplate",
 			message   = "message",
 		}
+	}
+
+	stage.labels {
+		values = {
+			level = "level",
+			level2 = "level2",
+		}
+	}
+
+	stage.template {
+		source = "timestamp"
+		template = "{{ if .timestamp }}{{ .timestamp }}{{ else }}{{ .timestamp2 }}{{ end }}"
+	}
+
+	stage.template {
+		source = "level"
+		template = "{{ if .level }}{{ .level }}{{ else }}{{ .level2 }}{{ end }}"
+	}
+
+	stage.template {
+		source = "msg"
+		template = "{{ if .msg }}{{ .msg }}{{ else }}{{ .msg2 }}{{ end }}"
 	}
 
 	// --- ETAPA B: Si no es JSON, intentamos con Regex para Texto Plano ---
@@ -70,7 +95,7 @@ loki.process "unified_logs" {
 // 5. ENVÍO A LOKI
 loki.write "default" {
 	endpoint {
-		url = "${LOKI_URL}/loki/api/v1/push"
+		url = sys.env("LOKI_URL") + "/loki/api/v1/push"
 	}
 	external_labels = {
 		source = "alloy-file",

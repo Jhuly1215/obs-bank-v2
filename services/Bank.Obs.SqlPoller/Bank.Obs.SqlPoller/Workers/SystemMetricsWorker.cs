@@ -1,4 +1,3 @@
-using Bank.Obs.SqlPoller.Metrics;
 using Bank.Obs.SqlPoller.Polling;
 using Bank.Obs.SqlPoller.State;
 using Microsoft.Extensions.Configuration;
@@ -11,26 +10,23 @@ using System.Threading.Tasks;
 
 namespace Bank.Obs.SqlPoller.Workers;
 
-public sealed class SqlMetricsWorker : BackgroundService
+public sealed class SystemMetricsWorker : BackgroundService
 {
     private readonly IConfiguration _config;
-    private readonly ILogger<SqlMetricsWorker> _logger;
+    private readonly ILogger<SystemMetricsWorker> _logger;
     private readonly MetricState _state;
-    private readonly SnapshotPollingService _poller;
-    private readonly SqlMetrics _metrics;
+    private readonly SystemPollingService _poller;
 
-    public SqlMetricsWorker(
+    public SystemMetricsWorker(
         IConfiguration config,
-        ILogger<SqlMetricsWorker> logger,
+        ILogger<SystemMetricsWorker> logger,
         MetricState state,
-        SnapshotPollingService poller,
-        SqlMetrics metrics)
+        SystemPollingService poller)
     {
         _config = config;
         _logger = logger;
         _state = state;
         _poller = poller;
-        _metrics = metrics;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -49,16 +45,13 @@ public sealed class SqlMetricsWorker : BackgroundService
             {
                 var snap = await _poller.PollAsync(connString, stoppingToken);
 
-                // Actualiza todo con 1 lock
-                _state.Update(snap);
+                _state.UpdateSystem(snap);
 
                 sw.Stop();
-                _metrics.RecordPollSuccess(sw.Elapsed.TotalSeconds);
 
                 _logger.LogInformation(
-                    "SQL poll base ok. intra(15m={i15}, pend24={ip24}, err24={ie24}, oldSec={io}) inter(15m={e15}, pend24={ep24}, err24={ee24}, oldSec={eo}) duration_ms={durationMs}",
-                    snap.IntraTxCreated15m, snap.IntraPendingCount24h, snap.IntraErrorCount24h, snap.IntraPendingOldestSec,
-                    snap.InterTxCreated15m, snap.InterPendingCount24h, snap.InterErrorCount24h, snap.InterPendingOldestSec,
+                    "System poll ok. dayType={day} anomalies={anomalies} duration_ms={durationMs}",
+                    snap.DayType, snap.QualityAnomalies?.Count ?? 0,
                     sw.ElapsedMilliseconds);
 
             }
@@ -69,9 +62,7 @@ public sealed class SqlMetricsWorker : BackgroundService
             catch (Exception ex)
             {
                 sw.Stop();
-                _metrics.RecordPollError(sw.Elapsed.TotalSeconds);
-
-                _logger.LogError(ex, "Error en SQL poller");
+                _logger.LogError(ex, "Error en System poller");
             }
 
             try

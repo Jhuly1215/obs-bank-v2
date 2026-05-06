@@ -72,11 +72,14 @@ app.UseSerilogRequestLogging();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Bank.Obs.FcmBridge API V1");
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Bank.Obs.FcmBridge API V1");
+    });
+}
 
 // --- Firebase Admin SDK ---
 var credentialsPath = Environment.GetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS");
@@ -100,7 +103,6 @@ else
     }
 }
 
-app.UseAuthorization();
 app.MapControllers();
 
 app.Run();

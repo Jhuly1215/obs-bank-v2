@@ -1,79 +1,104 @@
 logging {
-  level = "info"
+	level = "info"
 }
 
 // 1. DESCUBRIMIENTO DE ARCHIVOS (Dinámico)
 local.file_match "bank_logs" {
-  path_targets = [
-    { "__path__" = "/var/log/bank-apis/**/*.log" },
-    { "__path__" = "/var/log/bank-apis/**/*.json" },
-    { "__path__" = "/var/log/bank-apis/**/*.txt" },
-  ]
+	path_targets = [
+		{"__path__" = "/var/log/bank-apis/**/*.log"},
+		{"__path__" = "/var/log/bank-apis/**/*.json"},
+		{"__path__" = "/var/log/bank-apis/**/*.txt"},
+	]
 }
 
 // 2. ETIQUETADO POR CARPETA (service_name)
 discovery.relabel "labeled_logs" {
-  targets = local.file_match.bank_logs.targets
+	targets = local.file_match.bank_logs.targets
 
-  rule {
-    source_labels = ["__path__"]
-    regex         = "/var/log/bank-apis/([^/]+)/.*"
-    replacement   = "$1"
-    target_label  = "service_name"
-  }
+	rule {
+		source_labels = ["__path__"]
+		regex         = "/var/log/bank-apis/([^/]+)/.*"
+		replacement   = "$1"
+		target_label  = "service"
+	}
 }
 
 // 3. LECTURA DE ARCHIVOS
 loki.source.file "bank_files" {
-  targets    = discovery.relabel.labeled_logs.output
-  forward_to = [loki.process.unified_logs.receiver]
+	targets    = discovery.relabel.labeled_logs.output
+	forward_to = [loki.process.unified_logs.receiver]
 }
 
 // 4. PROCESAMIENTO UNIFICADO (JSON + TXT)
 loki.process "unified_logs" {
-  // --- ETAPA A: Si es JSON, extraemos campos clave ---
-  // IMPORTANTE: Los campos con @ deben encerrarse en comillas dobles escapadas "\""
-  stage.json {
-    expressions = {
-      timestamp = "\"@t\"",
-      level     = "\"@l\"",
-      msg       = "\"@mt\"",
-      message   = "message",
-    }
-  }
+	// --- ETAPA A: Si es JSON, extraemos campos clave ---
+	// IMPORTANTE: Los campos con @ deben encerrarse en comillas dobles escapadas "\""
+	stage.json {
+		expressions = {
+			timestamp = "\"@t\"",
+			timestamp2 = "Timestamp",
+			level     = "\"@l\"",
+			level2    = "Level",
+			msg       = "\"@mt\"",
+			msg2      = "MessageTemplate",
+			message   = "message",
+		}
+	}
 
-  // --- ETAPA B: Si no es JSON, intentamos con Regex para Texto Plano ---
-  stage.regex {
-    expression = "^(?P<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2})\\s+(?P<level>[A-Z]+)\\s+(?P<msg>.*)$"
-  }
+	stage.labels {
+		values = {
+			level = "level",
+			level2 = "level2",
+		}
+	}
 
-  // --- ETAPA C: Normalización de etiquetas ---
-  stage.labels {
-    values = {
-      level = "level",
-    }
-  }
+	stage.template {
+		source = "timestamp"
+		template = "{{ if .timestamp }}{{ .timestamp }}{{ else }}{{ .timestamp2 }}{{ end }}"
+	}
 
-  // --- ETAPA D: Sincronización de Tiempos Reales ---
-  stage.timestamp {
-    source = "timestamp"
-    format = "RFC3339"
-    fallback_formats = [
-      "2006-01-02 15:04:05",
-      "2006-01-02T15:04:05Z",
-    ]
-  }
+	stage.template {
+		source = "level"
+		template = "{{ if .level }}{{ .level }}{{ else }}{{ .level2 }}{{ end }}"
+	}
 
-  forward_to = [loki.write.default.receiver]
+	stage.template {
+		source = "msg"
+		template = "{{ if .msg }}{{ .msg }}{{ else }}{{ .msg2 }}{{ end }}"
+	}
+
+	// --- ETAPA B: Si no es JSON, intentamos con Regex para Texto Plano ---
+	stage.regex {
+		expression = "^(?P<timestamp>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2})\\s+(?P<level>[A-Z]+)\\s+(?P<msg>.*)$"
+	}
+
+	// --- ETAPA C: Normalización de etiquetas ---
+	stage.labels {
+		values = {
+			level = "level",
+		}
+	}
+
+	// --- ETAPA D: Sincronización de Tiempos Reales ---
+	stage.timestamp {
+		source           = "timestamp"
+		format           = "RFC3339"
+		fallback_formats = [
+			"2006-01-02 15:04:05",
+			"2006-01-02T15:04:05Z",
+		]
+	}
+
+	forward_to = [loki.write.default.receiver]
 }
 
 // 5. ENVÍO A LOKI
 loki.write "default" {
-  endpoint {
-    url = "${LOKI_URL}/loki/api/v1/push"
-  }
-  external_labels = {
-    source = "alloy-file",
-    env    = "demo",
-  }
+	endpoint {
+		url = sys.env("LOKI_URL") + "/loki/api/v1/push"
+	}
+	external_labels = {
+		source = "alloy-file",
+		env    = coalesce(sys.env("ALLOY_ENV"), "local"),
+	}
 }

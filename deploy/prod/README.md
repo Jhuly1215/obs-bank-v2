@@ -12,7 +12,7 @@ En producción, el sistema utiliza **MinIO (S3)** para garantizar que los logs y
 1. **Archivo `.env`**: Edita `deploy/prod/.env` con los valores reales:
    - `DOMAIN_NAME`: El dominio DNS asignado (ej: `obs.ecofuturo.com.bo`).
    - `LOKI_S3_ENDPOINT`: IP y puerto del servidor remoto de MinIO (ej: `10.0.0.50:9000`).
-   - `SQLSERVER_CONN`: Cadena de conexión al SQL Server corporativo.
+   - `ECOMONITOR_DB_CONN` y `ECONET_DB_CONN`: Cadenas de conexión seguras para SQL Poller y FCM Bridge.
    - `LDAP_SERVER_HOST`: IP del Controlador de Dominio (Active Directory).
    - `PROD_LOGS_PATH`: Ruta absoluta en el host donde las APIs escriben sus logs.
 2. **Servidor de Almacenamiento**:
@@ -21,7 +21,7 @@ En producción, el sistema utiliza **MinIO (S3)** para garantizar que los logs y
 3. **Proxy Inverso (IIS)**: 
    - Se debe configurar **Application Request Routing (ARR)** y **URL Rewrite** en el IIS del host.
    - Crear un sitio que escuche en el puerto 443 (HTTPS) y redirija el tráfico al puerto 3000 (Grafana).
-4. **FCM (Firebase)**: Colocar `firebase-service-account.json` en `observability/certs/` para las notificaciones.
+4. **FCM (Firebase)**: Colocar `firebase-service-account.json` en `observability/certs/` para que el FCM Bridge pueda despachar alertas a los móviles de los operadores.
 
 ---
 
@@ -48,17 +48,18 @@ docker compose -f docker-compose.yml -f deploy/prod/docker-compose.prod.yml down
 | :--- | :--- | :--- |
 | **IIS (Host)** | Proxy Inverso y SSL. | Puerto 443 -> localhost:3000 |
 | **Loki / Tempo** | Almacenamiento en S3 (MinIO). | Persistencia de largo plazo |
-| **Config-Init** | Automatizador de AD/LDAP. | Inyecta credenciales en Grafana |
-| **OpenLDAP (Test)** | Solo para ambientes de prueba. | Habilitado con bootstrap.ldif |
-| **SQL Poller** | Monitoreo de Transacciones. | Ingesta de métricas de negocio |
+| **FCM Bridge** | Notificaciones Push. | Lee usuarios de EcoMonitor y Tokens de Econet |
+| **OpenLDAP (Test)** | Autenticación local. | Reemplazable apuntando al AD del Banco en `ldap.toml` |
+| **SQL Poller** | Monitoreo de Transacciones. | Ingesta de métricas de negocio desde base de datos |
 
 ---
 
 ## 🚨 Seguridad y Cumplimiento
 
-1. **Aislamiento**: Ningún servicio (Prometheus, Loki, MinIO API) debe exponerse a la red LAN. Solo el Colector OTLP (4317) y el IIS (443) deben ser accesibles.
+1. **Aislamiento**: Ningún servicio (Prometheus, Loki, MinIO API, FCM Bridge interno) debe exponerse a la red LAN. Solo el Colector OTLP (4317) y el IIS (443) deben ser accesibles.
 2. **Retención**: La retención de datos se gestiona en los archivos `loki.yml` y `tempo.yml` en la carpeta `config/`. Ajustar según política de auditoría del banco.
 3. **Backups**: Realizar backups periódicos del volumen `minio_data_prod` para asegurar la persistencia de los logs históricos.
+4. **Base de Datos Econet**: Todas las conexiones a Econet desde el stack (FcmBridge y SqlPoller) deben ser creadas con usuarios que **exclusivamente tengan permisos de Lectura**, respetando el principio de mínimo privilegio.
 
 ---
 _"La estabilidad del Banco depende de la visibilidad de sus datos"._

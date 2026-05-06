@@ -1,6 +1,10 @@
 using Bank.Obs.FcmBridge.Models;
+using Bank.Obs.FcmBridge.Models.Responses;
+using Bank.Obs.FcmBridge.Options;
 using Bank.Obs.FcmBridge.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Bank.Obs.FcmBridge.Controllers;
 
@@ -10,13 +14,13 @@ public class AlertController : ControllerBase
 {
     private readonly IFcmService _fcmService;
     private readonly ILogger<AlertController> _logger;
-    private readonly string _apiKey;
+    private readonly FcmBridgeOptions _options;
 
-    public AlertController(IFcmService fcmService, ILogger<AlertController> logger, IConfiguration configuration)
+    public AlertController(IFcmService fcmService, ILogger<AlertController> logger, IOptions<FcmBridgeOptions> options)
     {
         _fcmService = fcmService;
         _logger = logger;
-        _apiKey = configuration["BRIDGE_API_KEY"] ?? "DEV_INSECURE_KEY_REPLACE_ME";
+        _options = options.Value;
     }
 
     [HttpGet("health")]
@@ -28,8 +32,14 @@ public class AlertController : ControllerBase
     [HttpPost("alert")]
     public async Task<IActionResult> ReceiveAlert([FromHeader(Name = "Authorization")] string? authorization, [FromBody] GrafanaWebhookPayload payload)
     {
-        // 1. Autorización Básica mediante ApiKey (Bearer)
-        if (string.IsNullOrWhiteSpace(authorization) || authorization != $"Bearer {_apiKey}")
+        string apiKey = string.IsNullOrWhiteSpace(_options.apiKey) ? Environment.GetEnvironmentVariable("BRIDGE_API_KEY") ?? "DEV_INSECURE_KEY_REPLACE_ME" : _options.apiKey;
+
+        if (!string.IsNullOrWhiteSpace(authorization) && authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            authorization = authorization.Substring("Bearer ".Length).Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(authorization) || authorization != apiKey)
         {
             _logger.LogWarning("Intento de acceso denegado en /alert. Auth header inválido o inexistente.");
             return Unauthorized(new { error = "Acceso denegado" });
@@ -42,16 +52,26 @@ public class AlertController : ControllerBase
 
         _logger.LogInformation("Recibida alerta de Grafana: {title}", payload.Title);
 
-        // 2. Procesar con el Servicio FCM
-        var result = await _fcmService.SendAlertAsync(payload);
+        var result = await _fcmService.enviarAlertaAsync(payload);
 
-        if (result.Success)
+        if (result.success)
         {
-            _logger.LogInformation("Alerta enviada correctamente. MessageId: {MessageId}", result.MessageId);
-            return Ok(new { success = true, topic = result.Topic, messageId = result.MessageId });
+            _logger.LogInformation("Alerta procesada. Activos: {Activos}, Validos: {Validos}, Éxitos: {Success}, Fallos: {Failure}", 
+                result.totalUsuariosActivos, result.totalTokensValidos, result.successCount, result.failureCount);
+            
+            return Ok(new { 
+                success = true, 
+                totalUsuariosActivos = result.totalUsuariosActivos,
+                totalTokensEncontrados = result.totalTokensEncontrados,
+                totalTokensValidos = result.totalTokensValidos,
+                successCount = result.successCount, 
+                failureCount = result.failureCount, 
+                usuariosSinToken = result.usuariosSinToken,
+                tokensFallidos = result.tokensFallidos 
+            });
         }
 
-        _logger.LogError("Error al enviar alerta a FCM: {Details}", result.ErrorMessage);
-        return StatusCode(500, new { error = "Fallo interno al despachar alerta a Firebase", details = result.ErrorMessage });
+        _logger.LogError("Error al procesar alerta para FCM.");
+        return StatusCode(500, new { error = "Fallo interno al despachar alerta a Firebase" });
     }
 }

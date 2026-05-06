@@ -1,0 +1,76 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: obsbank-interbancario-bancos
+    folder: ObsBank
+    interval: 2m
+    rules:
+      - uid: ob_ib_bank_err_warn
+        title: InterbankBankErrorRateWarning
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          summary: "Un banco destino presenta error rate elevado"
+          description: "El banco {{ $labels.banco }} supera 0.5% de error con volumen mínimo de 20 transacciones."
+          __dashboardUid__: "obsbank-interbancario-v33"
+          __panelId__: "3014"
+        labels:
+          severity: warning
+          scope: interbancario
+          component: banco-destino
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1200
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              editorMode: code
+              expr: |
+                (
+                  100 *
+                  sum by (banco) (
+                    tx_interbank_bank_state_count_24h{service_name="bank-sql-poller",estado="2"}
+                    or tx_interbank_bank_state_count_24h{service_name="bank-sql-poller",estado="4"}
+                    or tx_interbank_bank_state_count_24h{service_name="bank-sql-poller",estado="5"}
+                    or tx_interbank_bank_state_count_24h{service_name="bank-sql-poller",estado="15"}
+                  )
+                  /
+                  clamp_min(max by (banco) (tx_interbank_bank_count_24h{service_name="bank-sql-poller"}),1)
+                )
+                and on (banco)
+                max by (banco) (tx_interbank_bank_count_24h{service_name="bank-sql-poller"}) >= 20
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0.5]
+                    type: gte
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: threshold

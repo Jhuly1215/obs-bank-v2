@@ -39,7 +39,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Composición 24h por estado y fuente.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -83,7 +83,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sort_desc(max by (source, estado) (tx_state_count_24h{service_name=\"bank-sql-poller\"}))",
+          "expr": "sort_desc(max by (source,estado) (tx_state_count_24h{service_name=\"bank-sql-poller\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -99,7 +99,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "Debe reflejar solo estados operativos en curso.",
+      "description": "Backlog operativo real emitido por el poller.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -143,7 +143,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sort_desc(max by (source, estado) (tx_pending_current_count{service_name=\"bank-sql-poller\"}))",
+          "expr": "sort_desc(max by (source,estado) (tx_pending_current_count{service_name=\"bank-sql-poller\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -159,7 +159,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Inventario de estados programados 0,7,17.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -203,7 +203,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sort_desc(max by (source, estado) (tx_programmed_current_count{service_name=\"bank-sql-poller\"}))",
+          "expr": "sort_desc(max by (source,estado) (tx_programmed_current_count{service_name=\"bank-sql-poller\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -219,7 +219,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "Si tu exporter separa métricas por nombre, esta tabla sirve como referencia rápida.",
+      "description": "Resumen del estado 100.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -292,7 +292,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Buckets ge_900s, ge_3600s y ge_14400s.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -336,7 +336,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sort_desc(max by (source, estado, bucket) (tx_pending_aging_bucket_count{service_name=\"bank-sql-poller\"}))",
+          "expr": "sort_desc(max by (source,estado,bucket) (tx_pending_aging_bucket_count{service_name=\"bank-sql-poller\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -352,7 +352,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Edad promedio por estado.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -396,7 +396,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sort_desc(max by (source, estado) (tx_pending_avg_age_seconds{service_name=\"bank-sql-poller\"}))",
+          "expr": "sort_desc(max by (source,estado) (tx_pending_avg_age_seconds{service_name=\"bank-sql-poller\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -412,7 +412,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Edad máxima por estado.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -456,7 +456,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sort_desc(max by (source, estado) (tx_pending_max_age_seconds{service_name=\"bank-sql-poller\"}))",
+          "expr": "sort_desc(max by (source,estado) (tx_pending_max_age_seconds{service_name=\"bank-sql-poller\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -472,7 +472,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Conteo actual en estado 100.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -492,11 +492,11 @@
               },
               {
                 "color": "orange",
-                "value": 3
+                "value": 2
               },
               {
                 "color": "red",
-                "value": 5
+                "value": 3
               }
             ]
           }
@@ -550,7 +550,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Conteo en estado 100 > 300s.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -570,11 +570,11 @@
               },
               {
                 "color": "orange",
-                "value": 3
+                "value": 2
               },
               {
                 "color": "red",
-                "value": 5
+                "value": 3
               }
             ]
           }
@@ -628,14 +628,14 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Antigüedad máxima del estado 100.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "short",
+          "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -706,14 +706,14 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Máxima antigüedad operativa informada por el poller.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "short",
+          "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -722,15 +722,15 @@
               },
               {
                 "color": "yellow",
-                "value": 60
+                "value": 900
               },
               {
                 "color": "orange",
-                "value": 120
+                "value": 3600
               },
               {
                 "color": "red",
-                "value": 300
+                "value": 14400
               }
             ]
           }
@@ -784,7 +784,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Tendencia de inventarios.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -904,7 +904,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Envejecimiento de backlog y review.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1556,7 +1556,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "100 * (max(tx_compensated_count_24h{service_name=\"bank-sql-poller\",source=\"intra\"}) / clamp_min(max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"intra\"}),1))",
+          "expr": "100 * max(tx_compensated_count_24h{service_name=\"bank-sql-poller\",source=\"intra\"}) / clamp_min(max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"intra\"}),1)",
           "instant": true,
           "range": false,
           "legendFormat": "__auto",
@@ -1587,15 +1587,15 @@
               },
               {
                 "color": "yellow",
-                "value": 1
+                "value": 3
               },
               {
                 "color": "orange",
-                "value": 2
+                "value": 6
               },
               {
                 "color": "red",
-                "value": 3
+                "value": 10
               }
             ]
           }
@@ -1634,7 +1634,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "100 * (max(tx_compensated_count_24h{service_name=\"bank-sql-poller\",source=\"inter\"}) / clamp_min(max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"inter\"}),1))",
+          "expr": "100 * max(tx_compensated_count_24h{service_name=\"bank-sql-poller\",source=\"inter\"}) / clamp_min(max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"inter\"}),1)",
           "instant": true,
           "range": false,
           "legendFormat": "__auto",
@@ -1649,7 +1649,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Tendencia agregada.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2066,7 +2066,7 @@
     "obsbank",
     "estados",
     "aging",
-    "v3.2"
+    "v3.3"
   ],
   "templating": {
     "list": []
@@ -2077,8 +2077,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "ObsBank — Estados, Backlog y Aging v3.2",
-  "uid": "obsbank-estados-aging-v32",
+  "title": "ObsBank — Estados, Backlog y Aging v3.3",
+  "uid": "obsbank-estados-aging-v33",
   "version": 1,
   "weekStart": ""
 }

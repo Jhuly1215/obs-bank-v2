@@ -9,17 +9,28 @@ using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- Logging (Serilog structured JSON) ---
+// --- Metadata ---
+var meta = ServiceMetadata.FromConfiguration(builder.Configuration);
+
+// --- Logging (Serilog structured JSON + OTLP) ---
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .Enrich.FromLogContext()
     .WriteTo.Console(new CompactJsonFormatter())
+    .WriteTo.OpenTelemetry(options =>
+    {
+        options.Endpoint = meta.OtlpEndpoint.ToString();
+        options.ResourceAttributes = new Dictionary<string, object>
+        {
+            ["service.name"] = meta.Name,
+            ["service_name"] = meta.Name,
+            ["service.version"] = meta.Version
+        };
+    })
     .CreateLogger();
 
 builder.Host.UseSerilog();
 
-// --- Metadata ---
-var meta = ServiceMetadata.FromConfiguration(builder.Configuration);
 
 // --- Observability (OpenTelemetry) ---
 builder.AddObservability(meta);
@@ -31,25 +42,28 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Bank.Obs.FcmBridge API", Version = "v1" });
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
+        Type = SecuritySchemeType.ApiKey,
         In = ParameterLocation.Header,
-        Description = "Ingresa tu token en el formato: Bearer secreto_123_cambiar_en_produccion"
+        Description = "Ingresa tu clave de API (Ej: DEV_INSECURE_KEY_REPLACE_ME)"
     });
     c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecuritySchemeReference("Bearer", document),
+            new OpenApiSecuritySchemeReference("ApiKey", document),
             []
         }
     });
 });
 
-builder.Services.AddSingleton<IFcmService, FcmService>();
+builder.Services.Configure<Bank.Obs.FcmBridge.Options.FcmBridgeOptions>(
+    builder.Configuration.GetSection("FcmBridge"));
+
+builder.Services.AddScoped<Bank.Obs.FcmBridge.Data.IUsuariosNotificacionRepositorio, Bank.Obs.FcmBridge.Data.SqlUsuariosNotificacionRepositorio>();
+builder.Services.AddScoped<Bank.Obs.FcmBridge.Data.ITokensNotificacionRepositorio, Bank.Obs.FcmBridge.Data.SqlTokensNotificacionRepositorio>();
+builder.Services.AddScoped<IFcmService, FcmService>();
 
 var app = builder.Build();
 

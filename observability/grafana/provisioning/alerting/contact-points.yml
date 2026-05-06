@@ -1,0 +1,15 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: FCM-BRIDGE
+    receivers:
+      - uid: fcm_bridge_webhook
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: http://fcm-bridge:5050/alert
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: ${BRIDGE_API_KEY}
+          maxAlerts: "30"

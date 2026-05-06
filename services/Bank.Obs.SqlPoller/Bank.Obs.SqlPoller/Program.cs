@@ -35,7 +35,15 @@ builder.AddObservability(meta);
 
 // --- 3. Core Services ---
 builder.Services.AddSingleton<MetricState>();
-builder.Services.AddSingleton<SqlPollingClient>();
+builder.Services.AddSingleton<ISqlExecutor, SqlExecutor>();
+builder.Services.AddSingleton<HistoricalMetricsRepository>();
+builder.Services.AddSingleton<PendingRepository>();
+builder.Services.AddSingleton<ResolutionRepository>();
+builder.Services.AddSingleton<FailureRepository>();
+builder.Services.AddSingleton<DistributionRepository>();
+builder.Services.AddSingleton<AmountRepository>();
+builder.Services.AddSingleton<InterbankRepository>();
+builder.Services.AddSingleton<SnapshotPollingService>();
 builder.Services.AddSingleton<SqlMetrics>();
 builder.Services.AddHostedService<SqlMetricsWorker>();
 

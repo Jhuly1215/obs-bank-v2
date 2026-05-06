@@ -29,9 +29,9 @@
         "x": 0,
         "y": 0
       },
-      "id": 4000,
+      "id": 3000,
       "panels": [],
-      "title": "Infraestructura SQL",
+      "title": "Resumen interbancario 24h",
       "type": "row"
     },
     {
@@ -52,18 +52,6 @@
             "steps": [
               {
                 "color": "green"
-              },
-              {
-                "color": "yellow",
-                "value": 10
-              },
-              {
-                "color": "orange",
-                "value": 25
-              },
-              {
-                "color": "red",
-                "value": 50
               }
             ]
           }
@@ -76,7 +64,7 @@
         "x": 0,
         "y": 1
       },
-      "id": 4001,
+      "id": 3001,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -102,14 +90,14 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(max by (status,wait_type) (db_sessions_count))",
+          "expr": "max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"inter\"})",
           "instant": true,
           "range": false,
           "legendFormat": "__auto",
           "refId": "A"
         }
       ],
-      "title": "Sesiones activas",
+      "title": "Interbancarias totales 24h",
       "type": "stat"
     },
     {
@@ -124,24 +112,24 @@
             "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "short",
+          "unit": "percent",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
-              },
-              {
-                "color": "yellow",
-                "value": 100
+                "color": "red"
               },
               {
                 "color": "orange",
-                "value": 500
+                "value": 70
               },
               {
-                "color": "red",
-                "value": 1000
+                "color": "yellow",
+                "value": 85
+              },
+              {
+                "color": "green",
+                "value": 95
               }
             ]
           }
@@ -154,7 +142,7 @@
         "x": 6,
         "y": 1
       },
-      "id": 4002,
+      "id": 3002,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -180,14 +168,170 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(max by (file_id) (db_file_io_read_stall_ms))",
+          "expr": "100 * max(tx_success_count_24h{service_name=\"bank-sql-poller\",source=\"inter\"}) / clamp_min(max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"inter\"}),1)",
           "instant": true,
           "range": false,
           "legendFormat": "__auto",
           "refId": "A"
         }
       ],
-      "title": "Read stall total (ms)",
+      "title": "Success rate inter (%)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 0.25
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "id": 3003,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "100 * max(tx_error_count_24h{service_name=\"bank-sql-poller\",source=\"inter\"}) / clamp_min(max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"inter\"}),1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "refId": "A"
+        }
+      ],
+      "title": "Error rate inter (%)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "orange",
+                "value": 6
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "id": 3004,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "100 * max(tx_compensated_count_24h{service_name=\"bank-sql-poller\",source=\"inter\"}) / clamp_min(max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"inter\"}),1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "refId": "A"
+        }
+      ],
+      "title": "Compensated rate inter (%)",
       "type": "stat"
     },
     {
@@ -211,15 +355,171 @@
               },
               {
                 "color": "yellow",
-                "value": 100
+                "value": 1
               },
               {
                 "color": "orange",
-                "value": 500
+                "value": 2
               },
               {
                 "color": "red",
-                "value": 1000
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 7
+      },
+      "id": 3005,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "max(tx_review_current_count{service_name=\"bank-sql-poller\",source=\"inter\"})",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "refId": "A"
+        }
+      ],
+      "title": "Review actual inter",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "orange",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 7
+      },
+      "id": 3006,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "max(tx_review_dead_count{service_name=\"bank-sql-poller\",source=\"inter\"})",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "refId": "A"
+        }
+      ],
+      "title": "Review > 5 min inter",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "orange",
+                "value": 120
+              },
+              {
+                "color": "red",
+                "value": 300
               }
             ]
           }
@@ -230,9 +530,9 @@
         "h": 6,
         "w": 6,
         "x": 12,
-        "y": 1
+        "y": 7
       },
-      "id": 4003,
+      "id": 3007,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -258,14 +558,14 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(max by (file_id) (db_file_io_write_stall_ms))",
+          "expr": "max(tx_review_max_age_seconds{service_name=\"bank-sql-poller\",source=\"inter\"})",
           "instant": true,
           "range": false,
           "legendFormat": "__auto",
           "refId": "A"
         }
       ],
-      "title": "Write stall total (ms)",
+      "title": "Review max age inter (s)",
       "type": "stat"
     },
     {
@@ -277,11 +577,18 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "fixed",
-            "fixedColor": "light-blue"
+            "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "short"
+          "unit": "currencyUSD",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
         },
         "overrides": []
       },
@@ -289,9 +596,9 @@
         "h": 6,
         "w": 6,
         "x": 18,
-        "y": 1
+        "y": 7
       },
-      "id": 4004,
+      "id": 3008,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -317,291 +624,15 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(max by (file_name) (db_file_used_mb))",
+          "expr": "sum(max by (banco,moneda) (tx_interbank_bank_amount_total_24h{service_name=\"bank-sql-poller\"}))",
           "instant": true,
           "range": false,
           "legendFormat": "__auto",
           "refId": "A"
         }
       ],
-      "title": "Uso total BD (MB)",
+      "title": "Monto total inter 24h",
       "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": []
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 0,
-        "y": 7
-      },
-      "id": 4005,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "editorMode": "code",
-          "expr": "sort_desc(max by (status,wait_type) (db_sessions_count))",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Sesiones y waits del servidor",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": []
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 12,
-        "y": 7
-      },
-      "id": 4006,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "editorMode": "code",
-          "expr": "sort_desc(max by (file_id) (db_file_io_read_stall_ms or db_file_io_write_stall_ms or db_file_io_bytes_read or db_file_io_bytes_written))",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "I/O por archivo",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": []
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 0,
-        "y": 17
-      },
-      "id": 4007,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "editorMode": "code",
-          "expr": "sort_desc(max by (file_name) (db_file_size_mb or db_file_used_mb))",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Tamaño y uso de archivos de base",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 12,
-        "y": 17
-      },
-      "id": 4008,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "sum(max by (file_id) (db_file_io_read_stall_ms))",
-          "refId": "A",
-          "legendFormat": "Read stall total",
-          "editorMode": "code",
-          "instant": false,
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "sum(max by (file_id) (db_file_io_write_stall_ms))",
-          "refId": "B",
-          "legendFormat": "Write stall total",
-          "editorMode": "code",
-          "instant": false,
-          "range": true
-        }
-      ],
-      "title": "Evolución I/O SQL",
-      "type": "timeseries"
     },
     {
       "collapsed": false,
@@ -609,11 +640,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 13
       },
-      "id": 4009,
+      "id": 3009,
       "panels": [],
-      "title": "Calidad de dato",
+      "title": "Volumen, monto y estados por banco",
       "type": "row"
     },
     {
@@ -627,54 +658,35 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "orange",
-                "value": 5
-              },
-              {
-                "color": "red",
-                "value": 10
-              }
-            ]
-          }
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": []
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 8,
+        "h": 10,
+        "w": 12,
         "x": 0,
-        "y": 28
+        "y": 14
       },
-      "id": 4010,
+      "id": 3010,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
           "fields": "",
-          "values": false
+          "reducer": [
+            "sum"
+          ],
+          "show": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "showHeader": true
       },
       "pluginVersion": "11.1.4",
       "targets": [
@@ -684,15 +696,16 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(max by (source,tipo,estado) (tx_quality_missing_mod_count_24h{service_name=\"bank-sql-poller\"}))",
+          "expr": "sort_desc(max by (banco) (tx_interbank_bank_count_24h{service_name=\"bank-sql-poller\"}))",
+          "format": "table",
           "instant": true,
-          "range": false,
           "legendFormat": "__auto",
+          "range": false,
           "refId": "A"
         }
       ],
-      "title": "Missing modification 24h",
-      "type": "stat"
+      "title": "Volumen 24h por banco destino",
+      "type": "table"
     },
     {
       "datasource": {
@@ -705,54 +718,35 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "orange",
-                "value": 5
-              },
-              {
-                "color": "red",
-                "value": 10
-              }
-            ]
-          }
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": []
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 8,
-        "y": 28
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 14
       },
-      "id": 4011,
+      "id": 3011,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
           "fields": "",
-          "values": false
+          "reducer": [
+            "sum"
+          ],
+          "show": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "showHeader": true
       },
       "pluginVersion": "11.1.4",
       "targets": [
@@ -762,93 +756,16 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(max by (source,tipo,estado) (tx_quality_zero_duration_count_24h{service_name=\"bank-sql-poller\"}))",
+          "expr": "sort_desc(max by (banco,moneda) (tx_interbank_bank_amount_total_24h{service_name=\"bank-sql-poller\"}))",
+          "format": "table",
           "instant": true,
-          "range": false,
           "legendFormat": "__auto",
+          "range": false,
           "refId": "A"
         }
       ],
-      "title": "Zero duration 24h",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "orange",
-                "value": 5
-              },
-              {
-                "color": "red",
-                "value": 10
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 28
-      },
-      "id": 4012,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "editorMode": "code",
-          "expr": "sum(max by (source,tipo,estado) (tx_quality_negative_duration_count_24h{service_name=\"bank-sql-poller\"}))",
-          "instant": true,
-          "range": false,
-          "legendFormat": "__auto",
-          "refId": "A"
-        }
-      ],
-      "title": "Negative duration 24h",
-      "type": "stat"
+      "title": "Monto 24h por banco destino y moneda",
+      "type": "table"
     },
     {
       "datasource": {
@@ -876,9 +793,9 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 24
       },
-      "id": 4013,
+      "id": 3012,
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -899,7 +816,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sort_desc(max by (source,tipo,estado) (tx_quality_missing_mod_count_24h{service_name=\"bank-sql-poller\"} or tx_quality_zero_duration_count_24h{service_name=\"bank-sql-poller\"} or tx_quality_negative_duration_count_24h{service_name=\"bank-sql-poller\"}))",
+          "expr": "sort_desc(max by (banco,estado) (tx_interbank_bank_state_count_24h{service_name=\"bank-sql-poller\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -907,7 +824,260 @@
           "refId": "A"
         }
       ],
-      "title": "Detalle de calidad de dato",
+      "title": "Distribución por estado 24h por banco destino",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "id": 3013,
+      "panels": [],
+      "title": "Degradación y riesgo por banco",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 37
+      },
+      "id": 3014,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sort_desc(100 * sum by (banco) (tx_interbank_bank_state_count_24h{service_name=\"bank-sql-poller\",estado=\"2\"} or tx_interbank_bank_state_count_24h{service_name=\"bank-sql-poller\",estado=\"4\"} or tx_interbank_bank_state_count_24h{service_name=\"bank-sql-poller\",estado=\"5\"} or tx_interbank_bank_state_count_24h{service_name=\"bank-sql-poller\",estado=\"15\"}) / clamp_min(max by (banco) (tx_interbank_bank_count_24h{service_name=\"bank-sql-poller\"}),1))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Error rate 24h por banco destino (%)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 37
+      },
+      "id": 3015,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sort_desc(100 * sum by (banco) (tx_interbank_bank_state_count_24h{service_name=\"bank-sql-poller\",estado=\"9\"}) / clamp_min(max by (banco) (tx_interbank_bank_count_24h{service_name=\"bank-sql-poller\"}),1))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Compensated rate 24h por banco destino (%)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 47
+      },
+      "id": 3016,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sort_desc(sum by (banco) (tx_interbank_bank_state_count_24h{service_name=\"bank-sql-poller\",estado=\"100\"}))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Review 100 por banco destino",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 47
+      },
+      "id": 3017,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "topk(10, max by (banco) (tx_interbank_bank_count_24h{service_name=\"bank-sql-poller\"}))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Top bancos destino por volumen 24h",
       "type": "table"
     },
     {
@@ -960,258 +1130,72 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 46
-      },
-      "id": 4014,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "sum(max by (source,tipo,estado) (tx_quality_missing_mod_count_24h{service_name=\"bank-sql-poller\"}))",
-          "refId": "A",
-          "legendFormat": "Missing mod",
-          "editorMode": "code",
-          "instant": false,
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "sum(max by (source,tipo,estado) (tx_quality_zero_duration_count_24h{service_name=\"bank-sql-poller\"}))",
-          "refId": "B",
-          "legendFormat": "Zero duration",
-          "editorMode": "code",
-          "instant": false,
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "sum(max by (source,tipo,estado) (tx_quality_negative_duration_count_24h{service_name=\"bank-sql-poller\"}))",
-          "refId": "C",
-          "legendFormat": "Negative duration",
-          "editorMode": "code",
-          "instant": false,
-          "range": true
-        }
-      ],
-      "title": "Calidad de dato en el tiempo",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 46
-      },
-      "id": 4015,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "avg(max by (source,tipo) (tx_success_avg_seconds{service_name=\"bank-sql-poller\"}))",
-          "refId": "A",
-          "legendFormat": "Avg success duration",
-          "editorMode": "code",
-          "instant": false,
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "avg(max by (source,tipo) (tx_success_p95_seconds{service_name=\"bank-sql-poller\"}))",
-          "refId": "B",
-          "legendFormat": "P95 success duration",
-          "editorMode": "code",
-          "instant": false,
-          "range": true
-        }
-      ],
-      "title": "Latencia de éxito y anomalías",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
         "w": 24,
         "x": 0,
-        "y": 54
+        "y": 57
       },
-      "id": 4016,
-      "panels": [],
-      "title": "Logs de soporte",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
-      },
-      "description": "",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 55
-      },
-      "id": 4017,
+      "id": 3018,
       "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
           },
+          "expr": "100 * max(tx_error_count_24h{service_name=\"bank-sql-poller\",source=\"inter\"}) / clamp_min(max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"inter\"}),1)",
+          "refId": "A",
+          "legendFormat": "Error rate inter",
           "editorMode": "code",
-          "expr": "{service_name=\"bank-sql-poller\"}",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "Logs SQL Poller",
-      "type": "logs"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "P8E80F9AEF21F6940"
-      },
-      "description": "",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 55
-      },
-      "id": 4018,
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": false
-      },
-      "targets": [
+          "instant": false,
+          "range": true
+        },
         {
           "datasource": {
-            "type": "loki",
-            "uid": "P8E80F9AEF21F6940"
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
           },
+          "expr": "100 * max(tx_compensated_count_24h{service_name=\"bank-sql-poller\",source=\"inter\"}) / clamp_min(max(tx_created_total_24h{service_name=\"bank-sql-poller\",source=\"inter\"}),1)",
+          "refId": "B",
+          "legendFormat": "Compensated rate inter",
           "editorMode": "code",
-          "expr": "{service_name=~\"InterbancariaAsyncAPI|TransaccionInternaApi\"}",
-          "queryType": "range",
-          "refId": "A"
+          "instant": false,
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "max(tx_review_current_count{service_name=\"bank-sql-poller\",source=\"inter\"})",
+          "refId": "C",
+          "legendFormat": "Review actual inter",
+          "editorMode": "code",
+          "instant": false,
+          "range": true
         }
       ],
-      "title": "Logs APIs bancarias",
-      "type": "logs"
+      "title": "Error, compensación y review inter 24h",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
   "tags": [
     "obsbank",
-    "sql",
-    "infra",
-    "calidad",
-    "v3.2"
+    "interbancario",
+    "bancos",
+    "v3.3"
   ],
   "templating": {
     "list": []
@@ -1222,8 +1206,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "ObsBank — Infra SQL y Calidad de Dato v3.2",
-  "uid": "obsbank-sql-infra-calidad-v32",
+  "title": "ObsBank — Interbancario por Banco Destino v3.3",
+  "uid": "obsbank-interbancario-v33",
   "version": 1,
   "weekStart": ""
 }

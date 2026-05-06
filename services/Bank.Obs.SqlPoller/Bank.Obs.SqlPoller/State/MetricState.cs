@@ -5,12 +5,12 @@ namespace Bank.Obs.SqlPoller.State;
 
 public sealed class MetricState
 {
-    private SqlPollingClient.Snapshot _currentSnapshot;
+    private Snapshot _currentSnapshot;
 
-    public void Update(SqlPollingClient.Snapshot s)
+    public void Update(Snapshot s)
     {
         Interlocked.Exchange(ref _currentSnapshot, s);
     }
 
-    public SqlPollingClient.Snapshot Current => Volatile.Read(ref _currentSnapshot);
+    public Snapshot Current => Volatile.Read(ref _currentSnapshot);
 }

@@ -43,9 +43,14 @@ builder.Services.AddSingleton<FailureRepository>();
 builder.Services.AddSingleton<DistributionRepository>();
 builder.Services.AddSingleton<AmountRepository>();
 builder.Services.AddSingleton<InterbankRepository>();
-builder.Services.AddSingleton<SnapshotPollingService>();
+builder.Services.AddSingleton<IntraPollingService>();
+builder.Services.AddSingleton<InterbankPollingService>();
+builder.Services.AddSingleton<SystemPollingService>();
 builder.Services.AddSingleton<SqlMetrics>();
-builder.Services.AddHostedService<SqlMetricsWorker>();
+
+builder.Services.AddHostedService<IntraMetricsWorker>();
+builder.Services.AddHostedService<InterbankMetricsWorker>();
+builder.Services.AddHostedService<SystemMetricsWorker>();
 
 // --- 4. Start ---
 var host = builder.Build();

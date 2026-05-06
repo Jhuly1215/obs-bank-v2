@@ -22,11 +22,41 @@ public sealed record IoStatRow(int FileId, long ReadStallMs, long WriteStallMs, 
 public sealed record DatabaseSizeRow(string FileName, int SizeMB, int UsedMB);
 public sealed record AnomalyRow(string Source, int Tipo, int Estado, int MissingMod, int ZeroDur, int NegDur);
 
-public sealed record Snapshot(
-    // Context
-    string DayType,
+public sealed record IntraSnapshot(
+    int TxCreated5m, int TxCreated15m, int TxCreated1h, int TxCreated24h, int TxCreated7d, int TxCreated30d,
+    int PendingCount24h, int PendingCount7d, int PendingOldestSec,
+    int ErrorCount24h, int ResolvedCount24h, int ResAvgSec,
+    IReadOnlyList<StateCountRow> StateCount24h, IReadOnlyList<StateCountRow> OpPending, IReadOnlyList<StateCountRow> Programmed,
+    ReviewStatsRow Review, IReadOnlyList<PendingBucketRow> PendingBucket, FailuresRow Failures,
+    IReadOnlyList<TypeCountRow> TypeCount, IReadOnlyList<AmountTotalRow> AmountTotal, IReadOnlyList<AmountByTypeRow> AmountByType,
+    IReadOnlyList<SpeedStatsRow> SuccessSpeed,
+    int SuccessCount24h, IReadOnlyList<AgeStatsRow> PendingAgeStats, double AmountTotal1h, int SuccessSpeedP99,
+    int ZeroDurationCount, int MissingModCount, int ClosedCount24h, int OtherStateCount24h, int CompensatedCurrentCount
+);
 
-    // Historical Scalars (Kept for baseline/compatibility)
+public sealed record InterbankSnapshot(
+    int TxCreated5m, int TxCreated15m, int TxCreated1h, int TxCreated24h, int TxCreated7d, int TxCreated30d,
+    int PendingCount24h, int PendingCount7d, int PendingOldestSec,
+    int ErrorCount24h, int ResolvedCount24h, int ResAvgSec,
+    IReadOnlyList<StateCountRow> StateCount24h, IReadOnlyList<StateCountRow> OpPending, IReadOnlyList<StateCountRow> Programmed,
+    ReviewStatsRow Review, IReadOnlyList<PendingBucketRow> PendingBucket, FailuresRow Failures,
+    IReadOnlyList<TypeCountRow> TypeCount, IReadOnlyList<AmountTotalRow> AmountTotal, IReadOnlyList<AmountByTypeRow> AmountByType,
+    IReadOnlyList<SpeedStatsRow> SuccessSpeed,
+    IReadOnlyList<BankCountRow> BankCount, IReadOnlyList<BankStateCountRow> BankStateCount, IReadOnlyList<BankAmountRow> BankAmountTotal,
+    int SuccessCount24h, IReadOnlyList<AgeStatsRow> PendingAgeStats, double AmountTotal1h, int SuccessSpeedP99,
+    int ZeroDurationCount, int MissingModCount, int ClosedCount24h, int OtherStateCount24h, int CompensatedCurrentCount
+);
+
+public sealed record SystemSnapshot(
+    string DayType,
+    IReadOnlyList<SessionStatRow> ServerSessions,
+    IReadOnlyList<IoStatRow> FileIoStats,
+    IReadOnlyList<DatabaseSizeRow> DatabaseSizes,
+    IReadOnlyList<AnomalyRow> QualityAnomalies
+);
+
+public sealed record Snapshot(
+    string DayType,
     int IntraTxCreated15m, int InterTxCreated15m,
     int IntraTxCreated24h, int InterTxCreated24h,
     int IntraTxCreated7d, int InterTxCreated7d,
@@ -37,8 +67,6 @@ public sealed record Snapshot(
     int IntraErrorCount24h, int InterErrorCount24h,
     int IntraResolvedCount24h, int InterResolvedCount24h,
     int IntraResAvgSec, int InterResAvgSec,
-
-    // Tabular & Operational (Refactored)
     IReadOnlyList<StateCountRow> IntraStateCount24h, IReadOnlyList<StateCountRow> InterStateCount24h,
     IReadOnlyList<StateCountRow> IntraOpPending, IReadOnlyList<StateCountRow> InterOpPending,
     IReadOnlyList<StateCountRow> IntraProgrammed, IReadOnlyList<StateCountRow> InterProgrammed,
@@ -49,19 +77,13 @@ public sealed record Snapshot(
     IReadOnlyList<AmountTotalRow> IntraAmountTotal, IReadOnlyList<AmountTotalRow> InterAmountTotal,
     IReadOnlyList<AmountByTypeRow> IntraAmountByType, IReadOnlyList<AmountByTypeRow> InterAmountByType,
     IReadOnlyList<SpeedStatsRow> IntraSuccessSpeed, IReadOnlyList<SpeedStatsRow> InterSuccessSpeed,
-    
-    // Interbank Details
     IReadOnlyList<BankCountRow> InterBankCount,
     IReadOnlyList<BankStateCountRow> InterBankStateCount,
     IReadOnlyList<BankAmountRow> InterBankAmountTotal,
-
-    // Health & Infrastructure
     IReadOnlyList<SessionStatRow> ServerSessions,
     IReadOnlyList<IoStatRow> FileIoStats,
     IReadOnlyList<DatabaseSizeRow> DatabaseSizes,
     IReadOnlyList<AnomalyRow> QualityAnomalies,
-
-    // High Resolution & Anomalies
     int IntraSuccessCount24h, int InterSuccessCount24h,
     IReadOnlyList<AgeStatsRow> IntraPendingAgeStats, IReadOnlyList<AgeStatsRow> InterPendingAgeStats,
     int IntraTxCreated5m, int InterTxCreated5m,
@@ -74,3 +96,4 @@ public sealed record Snapshot(
     int IntraOtherStateCount24h, int InterOtherStateCount24h,
     int IntraCompensatedCurrentCount, int InterCompensatedCurrentCount
 );
+

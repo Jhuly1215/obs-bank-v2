@@ -16,21 +16,23 @@ public sealed class AmountRepository
     }
 
     public async Task<(
-        IReadOnlyList<AmountTotalRow> IntraAmountTotal, IReadOnlyList<AmountTotalRow> InterAmountTotal,
-        double IntraAmountTotal1h, double InterAmountTotal1h
-    )> GetMetricsAsync(SqlConnection conn, CancellationToken ct)
+
+        IReadOnlyList<AmountTotalRow> AmountTotal,
+        double AmountTotal1h
+    )> GetIntraMetricsAsync(SqlConnection conn, CancellationToken ct)
     {
-        var intraAmountTotal = await _executor.QueryListAsync(conn, SqlQueries.IntraAmountTotal24h, 
-            r => new AmountTotalRow(SqlReaderHelper.GetInt(r, 0), SqlReaderHelper.GetDouble(r, 1)), ct);
-        var interAmountTotal = await _executor.QueryListAsync(conn, SqlQueries.InterAmountTotal24h, 
-            r => new AmountTotalRow(SqlReaderHelper.GetInt(r, 0), SqlReaderHelper.GetDouble(r, 1)), ct);
+        var amountTotal = await _executor.QueryListAsync(conn, SqlQueries.IntraAmountTotal24h, r => new AmountTotalRow(SqlReaderHelper.GetInt(r, 0), SqlReaderHelper.GetDouble(r, 1)), ct);
+        var amountTotal1h = await _executor.ScalarDoubleAsync(conn, SqlQueries.IntraAmountTotal1h, ct);
+        return (amountTotal, amountTotal1h);
+    }
 
-        var intraAmountTotal1h = await _executor.ScalarDoubleAsync(conn, SqlQueries.IntraAmountTotal1h, ct);
-        var interAmountTotal1h = await _executor.ScalarDoubleAsync(conn, SqlQueries.InterAmountTotal1h, ct);
-
-        return (
-            intraAmountTotal, interAmountTotal,
-            intraAmountTotal1h, interAmountTotal1h
-        );
+    public async Task<(
+        IReadOnlyList<AmountTotalRow> AmountTotal,
+        double AmountTotal1h
+    )> GetInterMetricsAsync(SqlConnection conn, CancellationToken ct)
+    {
+        var amountTotal = await _executor.QueryListAsync(conn, SqlQueries.InterAmountTotal24h, r => new AmountTotalRow(SqlReaderHelper.GetInt(r, 0), SqlReaderHelper.GetDouble(r, 1)), ct);
+        var amountTotal1h = await _executor.ScalarDoubleAsync(conn, SqlQueries.InterAmountTotal1h, ct);
+        return (amountTotal, amountTotal1h);
     }
 }

@@ -27,7 +27,7 @@ services:
       LOKI_URL: "${LOKI_URL:-http://loki:3100}"
       TEMPO_URL: "${TEMPO_URL:-http://tempo:3200}"
     volumes:
-      - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro
+      - ../../observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro
     ports:
       - "${OTLP_GRPC_PORT:-4317}:4317"
       - "${OTLP_HTTP_PORT:-4318}:4318"
@@ -54,7 +54,7 @@ services:
       - "--web.enable-remote-write-receiver"
       - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-90d}"
     volumes:
-      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prom_data_prod:/prometheus
     expose:
       - "9090"
@@ -125,7 +125,7 @@ services:
       LOKI_S3_SKIP_VERIFY: "${LOKI_S3_SKIP_VERIFY:-false}"
       LOKI_RETENTION_PERIOD: "${LOKI_RETENTION_PERIOD:-2160h}"
     volumes:
-      - ./deploy/prod/config/loki.yml:/etc/loki/config.yml:ro
+      - ./config/loki.yml:/etc/loki/config.yml:ro
       - loki_data_prod:/loki
     expose:
       - "3100"
@@ -165,7 +165,7 @@ services:
       TEMPO_S3_INSECURE: "${TEMPO_S3_INSECURE:-false}"
       TEMPO_S3_SKIP_VERIFY: "${TEMPO_S3_SKIP_VERIFY:-false}"
     volumes:
-      - ./deploy/prod/config/tempo.yml:/etc/tempo.yaml:ro
+      - ./config/tempo.yml:/etc/tempo.yaml:ro
       - tempo_data_prod:/var/tempo
     expose:
       - "3200"
@@ -213,9 +213,9 @@ services:
       BRIDGE_API_KEY: "${BRIDGE_API_KEY}"
     volumes:
       - grafana_data_prod:/var/lib/grafana
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./deploy/prod/config/grafana.ini:/etc/grafana/grafana.ini:ro
-      - ./deploy/prod/config/ldap.toml:/etc/grafana/ldap.toml:ro
+      - ../../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./config/ldap.toml:/etc/grafana/ldap.toml:ro
     ports:
       - "${GRAFANA_PORT:-127.0.0.1:3000}:3000"
     networks:
@@ -245,8 +245,8 @@ services:
       ALLOY_ENV: "${ALLOY_ENV:-prod}"
       LOKI_URL: "${LOKI_URL:-http://loki:3100}"
     volumes:
-      - ./deploy/prod/config/alloy.alloy:/etc/alloy/config.alloy:ro
-      - ${PROD_LOGS_PATH:-./sample-logs}:/var/log/bank-apis:ro
+      - ./config/alloy.alloy:/etc/alloy/config.alloy:ro
+      - ${PROD_LOGS_PATH:-../../sample-logs}:/var/log/bank-apis:ro
       - alloy_data_prod:/var/lib/alloy/data
     expose:
       - "12345"
@@ -262,7 +262,7 @@ services:
   # ==========================================================
   sql-poller:
     build:
-      context: ./services/Bank.Obs.SqlPoller/Bank.Obs.SqlPoller
+      context: ../../services/Bank.Obs.SqlPoller/Bank.Obs.SqlPoller
       dockerfile: Dockerfile
     container_name: ecomonitor-sql-poller
     restart: unless-stopped
@@ -308,7 +308,7 @@ services:
   # ==========================================================
   fcm-bridge:
     build:
-      context: ./services/Bank.Obs.FcmBridge/Bank.Obs.FcmBridge
+      context: ../../services/Bank.Obs.FcmBridge/Bank.Obs.FcmBridge
       dockerfile: Dockerfile
     container_name: ecomonitor-fcm-bridge
     restart: unless-stopped
@@ -326,7 +326,7 @@ services:
       OpenTelemetry__ServiceName: "${FCM_BRIDGE_NAME:-ecomonitor-fcm-bridge}"
       OpenTelemetry__ServiceVersion: "${FCM_BRIDGE_VERSION:-1.0.0}"
     volumes:
-      - ./observability/certs/firebase-service-account.json:/etc/secrets/firebase-service-account.json:ro
+      - ../../observability/certs/firebase-service-account.json:/etc/secrets/firebase-service-account.json:ro
     expose:
       - "5050"
     networks:
@@ -347,18 +347,18 @@ services:
   # ==========================================================
   openldap:
     profiles:
-      - ldap-test
+      - ldap
     image: osixia/openldap:${OPENLDAP_VERSION:-1.5.0}
-    container_name: ecomonitor-openldap-test
+    container_name: ecomonitor-openldap
     restart: unless-stopped
     environment:
-      LDAP_DOMAIN: "${LDAP_DOMAIN:-planetexpress.com}"
-      LDAP_ADMIN_PASSWORD: "${LDAP_BIND_PASSWORD:-GoodNewsEveryone}"
+      LDAP_DOMAIN: "${LDAP_DOMAIN}"
+      LDAP_ADMIN_PASSWORD: "${LDAP_BIND_PASSWORD}"
       LDAP_TLS: "false"
       LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
       LDAP_RFC2307BIS_SCHEMA: "true"
     volumes:
-      - ./deploy/prod/config/ldap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
+      - ./config/ldap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
     ports:
       - "${LDAP_PORT:-127.0.0.1:389}:389"
     networks:

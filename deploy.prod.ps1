@@ -2,13 +2,14 @@
 # EcoMonitor - Deploy productivo
 # Usa SOLO deploy/prod/docker-compose.prod.yml
 # No mezcla docker-compose.yml base para evitar heredar configuración DEV.
+#
+# IMPORTANTE:
+# No usar --project-directory aquí, porque docker-compose.prod.yml
+# está dentro de deploy/prod y sus rutas relativas usan ../../
 # ==========================================================
 
 $ErrorActionPreference = "Stop"
 
-# ----------------------------------------------------------
-# Rutas base
-# ----------------------------------------------------------
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
 
@@ -22,11 +23,9 @@ $AlloyConfig = Join-Path $Root "deploy/prod/config/alloy.alloy"
 $LdapConfig = Join-Path $Root "deploy/prod/config/ldap.toml"
 $FirebaseJson = Join-Path $Root "observability/certs/firebase-service-account.json"
 
-# ----------------------------------------------------------
-# Funciones auxiliares
-# ----------------------------------------------------------
 function Write-Section {
   param([string]$Text)
+
   Write-Host ""
   Write-Host "==================================================" -ForegroundColor Cyan
   Write-Host " $Text" -ForegroundColor Cyan
@@ -35,22 +34,28 @@ function Write-Section {
 
 function Fail {
   param([string]$Message)
+
   Write-Host "ERROR: $Message" -ForegroundColor Red
   exit 1
 }
 
 function Warn {
   param([string]$Message)
+
   Write-Host "ADVERTENCIA: $Message" -ForegroundColor Yellow
 }
 
 function Ok {
   param([string]$Message)
+
   Write-Host "OK: $Message" -ForegroundColor Green
 }
 
 function Require-File {
-  param([string]$Path, [string]$Description)
+  param(
+    [string]$Path,
+    [string]$Description
+  )
 
   if (!(Test-Path $Path)) {
     Fail "No existe $Description en: $Path"
@@ -79,10 +84,7 @@ function Get-EnvValue {
 }
 
 function Require-EnvValue {
-  param(
-    [string]$Key,
-    [switch]$AllowPlaceholder
-  )
+  param([string]$Key)
 
   $value = Get-EnvValue -FilePath $EnvFile -Key $Key
 
@@ -90,40 +92,32 @@ function Require-EnvValue {
     Fail "La variable $Key no está definida en deploy/prod/.env"
   }
 
-  if (-not $AllowPlaceholder) {
-    if ($value -match "CAMBIAR_|CHANGE_ME|REEMPLAZAR") {
-      Fail "La variable $Key todavía tiene un valor placeholder: $value"
-    }
+  if ($value -match "CAMBIAR_|CHANGE_ME|REEMPLAZAR") {
+    Fail "La variable $Key todavía tiene un valor placeholder: $value"
   }
 
   Ok "Variable $Key definida"
 }
 
-function Run-Compose {
+function Invoke-Compose {
   param(
     [Parameter(Mandatory = $true)]
-    [string[]]$Args
+    [string[]]$ComposeArgs
   )
 
-  docker compose `
-    --project-directory "$Root" `
-    --env-file "$EnvFile" `
-    -f "$ComposeFile" `
-    @Args
+  & docker compose --env-file "$EnvFile" -f "$ComposeFile" @ComposeArgs
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker compose $($ComposeArgs -join ' ') falló con código $LASTEXITCODE"
+  }
 }
 
-# ----------------------------------------------------------
-# Inicio
-# ----------------------------------------------------------
 Write-Section "EcoMonitor - Deploy productivo"
 
 Write-Host "Directorio raíz : $Root" -ForegroundColor White
 Write-Host "Archivo .env    : $EnvFile" -ForegroundColor White
 Write-Host "Compose PROD    : $ComposeFile" -ForegroundColor White
 
-# ----------------------------------------------------------
-# Validación de archivos
-# ----------------------------------------------------------
 Write-Section "Validando archivos requeridos"
 
 Require-File $EnvFile "archivo deploy/prod/.env"
@@ -135,9 +129,6 @@ Require-File $AlloyConfig "configuración productiva de Alloy"
 Require-File $LdapConfig "configuración LDAP de Grafana"
 Require-File $FirebaseJson "firebase-service-account.json"
 
-# ----------------------------------------------------------
-# Validación de variables críticas
-# ----------------------------------------------------------
 Write-Section "Validando variables críticas de producción"
 
 Require-EnvValue "DOMAIN_NAME"
@@ -186,9 +177,6 @@ Require-EnvValue "TEMPO_BLOCK_RETENTION"
 Require-EnvValue "OTLP_GRPC_PORT"
 Require-EnvValue "OTLP_HTTP_PORT"
 
-# ----------------------------------------------------------
-# Advertencias de configuración
-# ----------------------------------------------------------
 Write-Section "Revisando coherencia de configuración"
 
 $minioScheme = Get-EnvValue -FilePath $EnvFile -Key "MINIO_SCHEME"
@@ -215,7 +203,7 @@ if ($minioScheme -eq "https") {
 }
 
 if ($lokiSkip -eq "true" -or $tempoSkip -eq "true") {
-  Warn "Tienes SKIP_VERIFY=true. Esto puede servir temporalmente por certificado, pero no debería quedar así en producción final."
+  Warn "Tienes SKIP_VERIFY=true. Sirve temporalmente por certificado, pero no debería quedar así en producción final."
 }
 
 if ($sqlConn -match "Database=EconetTransacciones") {
@@ -228,13 +216,15 @@ if ($sqlConn -match "Password=admin") {
 
 Ok "Validación de coherencia terminada"
 
-# ----------------------------------------------------------
-# Validación Docker
-# ----------------------------------------------------------
 Write-Section "Validando Docker"
 
 try {
   docker version | Out-Null
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker version falló"
+  }
+
   Ok "Docker responde correctamente"
 }
 catch {
@@ -243,28 +233,27 @@ catch {
 
 try {
   docker compose version | Out-Null
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker compose version falló"
+  }
+
   Ok "Docker Compose responde correctamente"
 }
 catch {
   Fail "Docker Compose no responde."
 }
 
-# ----------------------------------------------------------
-# Validación de Compose
-# ----------------------------------------------------------
 Write-Section "Validando docker-compose.prod.yml"
 
 try {
-  Run-Compose @("config") | Out-Null
+  Invoke-Compose @("config") | Out-Null
   Ok "La configuración Compose es válida"
 }
 catch {
-  Fail "docker compose config falló. Revisa deploy/prod/.env y deploy/prod/docker-compose.prod.yml"
+  Fail "docker compose config falló. Revisa deploy/prod/.env y deploy/prod/docker-compose.prod.yml. Detalle: $($_.Exception.Message)"
 }
 
-# ----------------------------------------------------------
-# Confirmación de despliegue
-# ----------------------------------------------------------
 Write-Section "Resumen de despliegue"
 
 Write-Host "Stack               : EcoMonitor PROD" -ForegroundColor White
@@ -276,75 +265,71 @@ Write-Host "OTLP gRPC           : 4317" -ForegroundColor White
 Write-Host "OTLP HTTP           : 4318" -ForegroundColor White
 Write-Host "MinIO remoto        : https://minio.ecofuturo.com.bo" -ForegroundColor White
 Write-Host "MinIO consola       : https://minio-console.ecofuturo.com.bo" -ForegroundColor White
-
 Write-Host ""
 Write-Host "Este script NO levanta MinIO. MinIO debe estar corriendo aparte en el servidor del proyecto MinIOServer." -ForegroundColor Yellow
-Write-Host ""
 
-# ----------------------------------------------------------
-# Bajar stack anterior
-# ----------------------------------------------------------
 Write-Section "Bajando stack anterior"
 
 try {
-  Run-Compose @("down", "--remove-orphans")
+  Invoke-Compose @("down", "--remove-orphans")
   Ok "Stack anterior detenido"
 }
 catch {
-  Fail "No se pudo bajar el stack anterior"
+  Fail "No se pudo bajar el stack anterior. Detalle: $($_.Exception.Message)"
 }
 
-# ----------------------------------------------------------
-# Levantar stack productivo
-# ----------------------------------------------------------
 Write-Section "Levantando stack productivo"
 
 try {
-  Run-Compose @("up", "-d", "--build")
+  Invoke-Compose @("up", "-d", "--build")
   Ok "Stack productivo levantado"
 }
 catch {
-  Fail "No se pudo levantar el stack productivo"
+  Fail "No se pudo levantar el stack productivo. Detalle: $($_.Exception.Message)"
 }
 
-# ----------------------------------------------------------
-# Estado de contenedores
-# ----------------------------------------------------------
 Write-Section "Estado de contenedores"
 
-Run-Compose @("ps")
+try {
+  Invoke-Compose @("ps")
+}
+catch {
+  Warn "No se pudo listar el estado de los contenedores. Detalle: $($_.Exception.Message)"
+}
 
-# ----------------------------------------------------------
-# Validación rápida de servicios
-# ----------------------------------------------------------
 Write-Section "Validación rápida"
 
 Write-Host "Esperando unos segundos para que los servicios inicialicen..." -ForegroundColor Yellow
 Start-Sleep -Seconds 10
 
-Write-Host ""
-Write-Host "Logs de minio-init:" -ForegroundColor Cyan
-docker logs ecomonitor-minio-init --tail 80
+$containers = @(
+  "ecomonitor-minio-init",
+  "ecomonitor-loki",
+  "ecomonitor-tempo",
+  "ecomonitor-grafana",
+  "ecomonitor-sql-poller",
+  "ecomonitor-fcm-bridge"
+)
 
-Write-Host ""
-Write-Host "Estado Loki:" -ForegroundColor Cyan
-docker logs ecomonitor-loki --tail 40
+foreach ($container in $containers) {
+  Write-Host ""
+  Write-Host "Logs de ${container}:" -ForegroundColor Cyan
 
-Write-Host ""
-Write-Host "Estado Tempo:" -ForegroundColor Cyan
-docker logs ecomonitor-tempo --tail 40
+  docker ps -a --format "{{.Names}}" | Select-String -SimpleMatch $container | Out-Null
 
-Write-Host ""
-Write-Host "Estado Grafana:" -ForegroundColor Cyan
-docker logs ecomonitor-grafana --tail 30
+  if ($LASTEXITCODE -eq 0) {
+    docker logs $container --tail 50
+  }
+  else {
+    Warn "No existe el contenedor $container"
+  }
+}
 
-# ----------------------------------------------------------
-# Prueba HTTP local Grafana
-# ----------------------------------------------------------
 Write-Section "Prueba de acceso local a Grafana"
 
 try {
   $response = Invoke-WebRequest -Uri "http://127.0.0.1:3000/api/health" -UseBasicParsing -TimeoutSec 10
+
   if ($response.StatusCode -eq 200) {
     Ok "Grafana responde en http://127.0.0.1:3000/api/health"
   }
@@ -356,9 +341,6 @@ catch {
   Warn "No se pudo consultar Grafana local todavía. Puede estar inicializando o IIS/Docker aún no terminó de levantar."
 }
 
-# ----------------------------------------------------------
-# Final
-# ----------------------------------------------------------
 Write-Section "EcoMonitor PROD levantado"
 
 Write-Host "Grafana interno     : http://127.0.0.1:3000" -ForegroundColor White

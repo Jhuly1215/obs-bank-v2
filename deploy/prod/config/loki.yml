@@ -2,9 +2,10 @@ auth_enabled: false
 
 server:
   http_listen_port: 3100
+  grpc_listen_port: 9096
 
 common:
-  path_prefix: /loki
+  path_prefix: ${LOKI_STORAGE_DIR:-/loki}
   replication_factor: 1
   ring:
     kvstore:
@@ -22,29 +23,35 @@ schema_config:
 
 storage_config:
   aws:
-    endpoint: ${LOKI_S3_ENDPOINT}
-    bucketnames: ${LOKI_S3_BUCKET}
-    access_key_id: ${LOKI_S3_ACCESS_KEY}
+    endpoint: ${LOKI_S3_ENDPOINT:-minio.ecofuturo.com.bo}
+    bucketnames: ${LOKI_S3_BUCKET:-loki}
+    access_key_id: ${LOKI_S3_ACCESS_KEY:-admin_ecofuturo}
     secret_access_key: ${LOKI_S3_SECRET_KEY}
     s3forcepathstyle: true
-    region: ${LOKI_S3_REGION}
-    insecure: ${LOKI_S3_INSECURE}
+    region: ${LOKI_S3_REGION:-us-east-1}
+    insecure: ${LOKI_S3_INSECURE:-false}
     http_config:
-      insecure_skip_verify: true
+      insecure_skip_verify: ${LOKI_S3_SKIP_VERIFY:-false}
 
   tsdb_shipper:
-    active_index_directory: ${LOKI_STORAGE_DIR}/tsdb-index
-    cache_location: ${LOKI_STORAGE_DIR}/tsdb-cache
+    active_index_directory: ${LOKI_STORAGE_DIR:-/loki}/tsdb-index
+    cache_location: ${LOKI_STORAGE_DIR:-/loki}/tsdb-cache
+    cache_ttl: 24h
 
 compactor:
-  working_directory: ${LOKI_STORAGE_DIR}/compactor
+  working_directory: ${LOKI_STORAGE_DIR:-/loki}/compactor
+  compaction_interval: 10m
   retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 2
   delete_request_store: s3
 
 limits_config:
-  retention_period: 2160h
+  retention_period: ${LOKI_RETENTION_PERIOD:-2160h}
   reject_old_samples: true
-  reject_old_samples_max_age: 2160h
+  reject_old_samples_max_age: ${LOKI_RETENTION_PERIOD:-2160h}
+  allow_structured_metadata: true
+  volume_enabled: true
 
 querier:
   max_concurrent: 8
@@ -52,6 +59,8 @@ querier:
 query_range:
   align_queries_with_step: true
 
-# Desactivar ruler por ahora (porque no tienes Alertmanager definido)
 ruler:
   enable_api: false
+
+analytics:
+  reporting_enabled: false

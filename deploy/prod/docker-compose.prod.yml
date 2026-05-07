@@ -1,0 +1,365 @@
+name: ecomonitor-prod
+
+networks:
+  obs:
+    driver: bridge
+
+volumes:
+  prom_data_prod:
+  loki_data_prod:
+  tempo_data_prod:
+  grafana_data_prod:
+  alloy_data_prod:
+  redis_data_prod:
+
+services:
+  # ==========================================================
+  # OpenTelemetry Collector
+  # Recibe telemetría OTLP desde servicios internos/externos.
+  # ==========================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION}
+    container_name: ecomonitor-otel-collector
+    restart: unless-stopped
+    command:
+      - "--config=/etc/otelcol/config.yml"
+    environment:
+      LOKI_URL: "${LOKI_URL:-http://loki:3100}"
+      TEMPO_URL: "${TEMPO_URL:-http://tempo:3200}"
+    volumes:
+      - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro
+    ports:
+      - "${OTLP_GRPC_PORT:-4317}:4317"
+      - "${OTLP_HTTP_PORT:-4318}:4318"
+    networks:
+      - obs
+    depends_on:
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+
+  # ==========================================================
+  # Prometheus
+  # Métricas internas, SQL Poller y métricas generadas por Tempo.
+  # No se expone directamente; Grafana accede por red Docker.
+  # ==========================================================
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION}
+    container_name: ecomonitor-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-remote-write-receiver"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-90d}"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_data_prod:/prometheus
+    expose:
+      - "9090"
+    networks:
+      - obs
+
+  # ==========================================================
+  # MinIO remoto PROD
+  # MinIO corre aparte en otro servidor físico.
+  # EcoMonitor se conecta por DNS real:
+  # https://minio.ecofuturo.com.bo
+  # ==========================================================
+  minio-init:
+    image: minio/mc:${MINIO_MC_VERSION:-RELEASE.2025-01-17T23-25-50Z}
+    container_name: ecomonitor-minio-init
+    restart: "no"
+    environment:
+      MINIO_SCHEME: "${MINIO_SCHEME:-https}"
+      MINIO_ENDPOINT: "${MINIO_ENDPOINT:-minio.ecofuturo.com.bo}"
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-admin_ecofuturo}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      MINIO_BUCKET_LOKI: "${MINIO_BUCKET_LOKI:-loki}"
+      MINIO_BUCKET_TEMPO: "${MINIO_BUCKET_TEMPO:-tempo}"
+      MINIO_MC_INSECURE: "${MINIO_MC_INSECURE:-false}"
+    entrypoint: >
+      /bin/sh -c " set -e;
+
+      echo 'Validando MinIO PROD remoto en' $${MINIO_SCHEME}://$${MINIO_ENDPOINT};
+
+      if [ \"$${MINIO_MC_INSECURE}\" = \"true\" ]; then
+        MC_INSECURE='--insecure';
+      else
+        MC_INSECURE='';
+      fi;
+
+      until /usr/bin/mc alias set remote $${MINIO_SCHEME}://$${MINIO_ENDPOINT} $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} $${MC_INSECURE}; do
+        echo 'Esperando MinIO PROD remoto...';
+        sleep 5;
+      done;
+
+      /usr/bin/mc mb -p remote/$${MINIO_BUCKET_LOKI} $${MC_INSECURE} || true; /usr/bin/mc mb -p remote/$${MINIO_BUCKET_TEMPO} $${MC_INSECURE} || true;
+
+      /usr/bin/mc anonymous set none remote/$${MINIO_BUCKET_LOKI} $${MC_INSECURE} || true; /usr/bin/mc anonymous set none remote/$${MINIO_BUCKET_TEMPO} $${MC_INSECURE} || true;
+
+      echo 'Buckets PROD listos en MinIO remoto.'; "
+    networks:
+      - obs
+
+  # ==========================================================
+  # Loki
+  # Logs con almacenamiento S3/MinIO externo y retención 90 días.
+  # ==========================================================
+  loki:
+    image: grafana/loki:${LOKI_VERSION}
+    container_name: ecomonitor-loki
+    restart: unless-stopped
+    command:
+      - "-config.file=/etc/loki/config.yml"
+      - "-config.expand-env=true"
+    environment:
+      LOKI_STORAGE_DIR: "${LOKI_STORAGE_DIR:-/loki}"
+      LOKI_S3_BUCKET: "${LOKI_S3_BUCKET:-loki}"
+      LOKI_S3_ENDPOINT: "${LOKI_S3_ENDPOINT:-minio.ecofuturo.com.bo}"
+      LOKI_S3_REGION: "${LOKI_S3_REGION:-us-east-1}"
+      LOKI_S3_ACCESS_KEY: "${LOKI_S3_ACCESS_KEY:-admin_ecofuturo}"
+      LOKI_S3_SECRET_KEY: "${LOKI_S3_SECRET_KEY}"
+      LOKI_S3_INSECURE: "${LOKI_S3_INSECURE:-false}"
+      LOKI_S3_SKIP_VERIFY: "${LOKI_S3_SKIP_VERIFY:-false}"
+      LOKI_RETENTION_PERIOD: "${LOKI_RETENTION_PERIOD:-2160h}"
+    volumes:
+      - ./deploy/prod/config/loki.yml:/etc/loki/config.yml:ro
+      - loki_data_prod:/loki
+    expose:
+      - "3100"
+    networks:
+      - obs
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+  # ==========================================================
+  # Tempo
+  # Trazas con almacenamiento S3/MinIO externo y retención 90 días.
+  # ==========================================================
+  tempo:
+    image: grafana/tempo:${TEMPO_VERSION}
+    container_name: ecomonitor-tempo
+    restart: unless-stopped
+    command:
+      - "-config.file=/etc/tempo.yaml"
+      - "-config.expand-env=true"
+    environment:
+      PROMETHEUS_URL: "${PROMETHEUS_URL:-http://prometheus:9090}"
+
+      TEMPO_STORAGE_DIR: "${TEMPO_STORAGE_DIR:-/var/tempo}"
+      TEMPO_BLOCK_RETENTION: "${TEMPO_BLOCK_RETENTION:-2160h}"
+
+      TEMPO_HTTP_LISTEN_PORT: "${TEMPO_HTTP_LISTEN_PORT:-3200}"
+      TEMPO_GRPC_LISTEN_PORT: "${TEMPO_GRPC_LISTEN_PORT:-4317}"
+      TEMPO_HTTP_RECEIVER_PORT: "${TEMPO_HTTP_RECEIVER_PORT:-4318}"
+      TEMPO_FRONTEND_PORT: "${TEMPO_FRONTEND_PORT:-9095}"
+
+      TEMPO_S3_BUCKET: "${TEMPO_S3_BUCKET:-tempo}"
+      TEMPO_S3_ENDPOINT: "${TEMPO_S3_ENDPOINT:-minio.ecofuturo.com.bo}"
+      TEMPO_S3_REGION: "${TEMPO_S3_REGION:-us-east-1}"
+      TEMPO_S3_ACCESS_KEY: "${TEMPO_S3_ACCESS_KEY:-admin_ecofuturo}"
+      TEMPO_S3_SECRET_KEY: "${TEMPO_S3_SECRET_KEY}"
+      TEMPO_S3_INSECURE: "${TEMPO_S3_INSECURE:-false}"
+      TEMPO_S3_SKIP_VERIFY: "${TEMPO_S3_SKIP_VERIFY:-false}"
+    volumes:
+      - ./deploy/prod/config/tempo.yml:/etc/tempo.yaml:ro
+      - tempo_data_prod:/var/tempo
+    expose:
+      - "3200"
+      - "4317"
+      - "4318"
+      - "9095"
+    networks:
+      - obs
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      prometheus:
+        condition: service_started
+
+  # ==========================================================
+  # Grafana
+  # Único servicio web expuesto al host. IIS publica HTTPS.
+  # ==========================================================
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION}
+    container_name: ecomonitor-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GF_SECURITY_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GF_SECURITY_ADMIN_PASSWORD}"
+
+      GF_SERVER_DOMAIN: "${DOMAIN_NAME:-obs.ecofuturo.com.bo}"
+      GF_SERVER_ROOT_URL: "${GRAFANA_URL:-https://obs.ecofuturo.com.bo/}"
+
+      GF_SMTP_ENABLED: "${GF_SMTP_ENABLED:-true}"
+      GF_SMTP_HOST: "${GF_SMTP_HOST}"
+      GF_SMTP_USER: "${GF_SMTP_USER}"
+      GF_SMTP_PASSWORD: "${GF_SMTP_PASSWORD}"
+      GF_SMTP_FROM_ADDRESS: "${GF_SMTP_FROM_ADDRESS}"
+      GF_SMTP_FROM_NAME: "${GF_SMTP_FROM_NAME}"
+
+      GF_AUTH_LDAP_ENABLED: "${GF_AUTH_LDAP_ENABLED:-true}"
+      GF_AUTH_LDAP_CONFIG_FILE: "/etc/grafana/ldap.toml"
+      GF_AUTH_LDAP_ALLOW_SIGN_UP: "${GF_AUTH_LDAP_ALLOW_SIGN_UP:-true}"
+
+      PROMETHEUS_URL: "${PROMETHEUS_URL:-http://prometheus:9090}"
+      LOKI_URL: "${LOKI_URL:-http://loki:3100}"
+      TEMPO_URL: "${TEMPO_URL:-http://tempo:3200}"
+
+      BRIDGE_API_KEY: "${BRIDGE_API_KEY}"
+    volumes:
+      - grafana_data_prod:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/prod/config/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./deploy/prod/config/ldap.toml:/etc/grafana/ldap.toml:ro
+    ports:
+      - "${GRAFANA_PORT:-127.0.0.1:3000}:3000"
+    networks:
+      - obs
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+
+  # ==========================================================
+  # Grafana Alloy
+  # Lee archivos de logs desde PROD_LOGS_PATH y los envía a Loki.
+  # ==========================================================
+  alloy:
+    image: grafana/alloy:${ALLOY_VERSION}
+    container_name: ecomonitor-alloy
+    restart: unless-stopped
+    command:
+      - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/var/lib/alloy/data"
+      - "/etc/alloy/config.alloy"
+    environment:
+      ALLOY_ENV: "${ALLOY_ENV:-prod}"
+      LOKI_URL: "${LOKI_URL:-http://loki:3100}"
+    volumes:
+      - ./deploy/prod/config/alloy.alloy:/etc/alloy/config.alloy:ro
+      - ${PROD_LOGS_PATH:-./sample-logs}:/var/log/bank-apis:ro
+      - alloy_data_prod:/var/lib/alloy/data
+    expose:
+      - "12345"
+    networks:
+      - obs
+    depends_on:
+      loki:
+        condition: service_started
+
+  # ==========================================================
+  # SQL Poller
+  # Consulta la BD EcoMonitor, no EconetTransacciones directamente.
+  # ==========================================================
+  sql-poller:
+    build:
+      context: ./services/Bank.Obs.SqlPoller/Bank.Obs.SqlPoller
+      dockerfile: Dockerfile
+    container_name: ecomonitor-sql-poller
+    restart: unless-stopped
+    environment:
+      SqlPoller__ConnectionString: "${SQLSERVER_CONN}"
+      SqlPoller__IntervalSeconds: "${SQL_POLLER_INTERVAL:-60}"
+
+      OpenTelemetry__OtlpEndpoint: "${OTEL_COLLECTOR_URL:-http://otel-collector:4317}"
+      OpenTelemetry__ServiceName: "${SQL_POLLER_NAME:-ecomonitor-sql-poller}"
+      OpenTelemetry__ServiceVersion: "${SQL_POLLER_VERSION:-1.0.0}"
+    networks:
+      - obs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  # ==========================================================
+  # Redis
+  # Almacenamiento auxiliar interno.
+  # ==========================================================
+  redis:
+    image: redis:${REDIS_VERSION}
+    container_name: ecomonitor-redis
+    restart: unless-stopped
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+    volumes:
+      - redis_data_prod:/data
+    expose:
+      - "6379"
+    networks:
+      - obs
+
+  # ==========================================================
+  # FCM Bridge
+  # Recibe webhooks de Grafana y envía push por Firebase.
+  # No se expone al host; Grafana lo llama por red Docker.
+  # URL interna esperada: http://fcm-bridge:5050/alert
+  # ==========================================================
+  fcm-bridge:
+    build:
+      context: ./services/Bank.Obs.FcmBridge/Bank.Obs.FcmBridge
+      dockerfile: Dockerfile
+    container_name: ecomonitor-fcm-bridge
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: "http://+:5050"
+      ASPNETCORE_ENVIRONMENT: "Production"
+
+      GOOGLE_APPLICATION_CREDENTIALS: "/etc/secrets/firebase-service-account.json"
+      BRIDGE_API_KEY: "${BRIDGE_API_KEY}"
+
+      ConnectionStrings__EcoMonitorDb: "${SQLSERVER_CONN}"
+      ConnectionStrings__EconetDb: "${ECONET_DB_CONN}"
+
+      OpenTelemetry__OtlpEndpoint: "${OTEL_COLLECTOR_URL:-http://otel-collector:4317}"
+      OpenTelemetry__ServiceName: "${FCM_BRIDGE_NAME:-ecomonitor-fcm-bridge}"
+      OpenTelemetry__ServiceVersion: "${FCM_BRIDGE_VERSION:-1.0.0}"
+    volumes:
+      - ./observability/certs/firebase-service-account.json:/etc/secrets/firebase-service-account.json:ro
+    expose:
+      - "5050"
+    networks:
+      - obs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      otel-collector:
+        condition: service_started
+      redis:
+        condition: service_started
+
+  # ==========================================================
+  # OpenLDAP local de prueba
+  # NO se levanta por defecto. Solo usar con:
+  # docker compose --profile ldap-test ...
+  # Para AD real, Grafana debe apuntar al controlador de dominio.
+  # ==========================================================
+  openldap:
+    profiles:
+      - ldap-test
+    image: osixia/openldap:${OPENLDAP_VERSION:-1.5.0}
+    container_name: ecomonitor-openldap-test
+    restart: unless-stopped
+    environment:
+      LDAP_DOMAIN: "${LDAP_DOMAIN:-planetexpress.com}"
+      LDAP_ADMIN_PASSWORD: "${LDAP_BIND_PASSWORD:-GoodNewsEveryone}"
+      LDAP_TLS: "false"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
+      LDAP_RFC2307BIS_SCHEMA: "true"
+    volumes:
+      - ./deploy/prod/config/ldap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
+    ports:
+      - "${LDAP_PORT:-127.0.0.1:389}:389"
+    networks:
+      - obs

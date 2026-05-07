@@ -1,4 +1,4 @@
-name: obs-bank-v2
+name: ecomonitor-dev
 
 # --- PLANTILLA DE OBSERVABILIDAD ZERO-CODE ---
 x-otel-base: &otel-base
@@ -23,6 +23,52 @@ x-otel-base: &otel-base
     - otel-collector
 
 services:
+  # ==========================================================
+  # Inicialización de buckets en MinIO DEV
+  # MinIO corre en el mismo servidor físico, pero en otro proyecto:
+  # https://github.com/Jhuly1215/MinIOServer
+  #
+  # En DEV se usa extra_hosts porque el dominio público apunta al
+  # mismo host físico donde corre Docker/IIS.
+  # ==========================================================
+  minio-init:
+    image: minio/mc:${MINIO_MC_VERSION:-RELEASE.2025-01-17T23-25-50Z}
+    container_name: ecomonitor-dev-minio-init
+    restart: "no"
+    environment:
+      MINIO_SCHEME: "${MINIO_SCHEME:-https}"
+      MINIO_ENDPOINT: "${MINIO_ENDPOINT:-minio.ecofuturo.com.bo}"
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-admin_ecofuturo}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      MINIO_BUCKET_LOKI: "${MINIO_BUCKET_LOKI:-loki}"
+      MINIO_BUCKET_TEMPO: "${MINIO_BUCKET_TEMPO:-tempo}"
+      MINIO_MC_INSECURE: "${MINIO_MC_INSECURE:-false}"
+    entrypoint: >
+      /bin/sh -c " set -e;
+
+      echo 'Validando MinIO DEV en' $${MINIO_SCHEME}://$${MINIO_ENDPOINT};
+
+      if [ \"$${MINIO_MC_INSECURE}\" = \"true\" ]; then
+        MC_INSECURE='--insecure';
+      else
+        MC_INSECURE='';
+      fi;
+
+      until /usr/bin/mc alias set remote $${MINIO_SCHEME}://$${MINIO_ENDPOINT} $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} $${MC_INSECURE}; do
+        echo 'Esperando MinIO DEV...';
+        sleep 5;
+      done;
+
+      /usr/bin/mc mb -p remote/$${MINIO_BUCKET_LOKI} $${MC_INSECURE} || true; /usr/bin/mc mb -p remote/$${MINIO_BUCKET_TEMPO} $${MC_INSECURE} || true;
+
+      /usr/bin/mc anonymous set none remote/$${MINIO_BUCKET_LOKI} $${MC_INSECURE} || true; /usr/bin/mc anonymous set none remote/$${MINIO_BUCKET_TEMPO} $${MC_INSECURE} || true;
+
+      echo 'Buckets DEV listos en MinIO.'; "
+    extra_hosts:
+      - "minio.ecofuturo.com.bo:host-gateway"
+      - "minio-console.ecofuturo.com.bo:host-gateway"
+    networks:
+      - obs
   otel-agent-provider:
     image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-dotnet:${OTEL_AGENT_VERSION}
     container_name: otel-agent-provider
@@ -61,32 +107,72 @@ services:
 
   loki:
     image: grafana/loki:${LOKI_VERSION}
+    container_name: ecomonitor-dev-loki
+    restart: unless-stopped
     command:
-      - -config.file=/etc/loki/config.yml
-      - -config.expand-env=true
+      - "-config.file=/etc/loki/config.yml"
+      - "-config.expand-env=true"
     environment:
       LOKI_STORAGE_DIR: "${LOKI_STORAGE_DIR:-/loki}"
+
+      LOKI_S3_BUCKET: "${LOKI_S3_BUCKET:-loki}"
+      LOKI_S3_ENDPOINT: "${LOKI_S3_ENDPOINT:-minio.ecofuturo.com.bo}"
+      LOKI_S3_REGION: "${LOKI_S3_REGION:-us-east-1}"
+      LOKI_S3_ACCESS_KEY: "${LOKI_S3_ACCESS_KEY:-admin_ecofuturo}"
+      LOKI_S3_SECRET_KEY: "${LOKI_S3_SECRET_KEY}"
+      LOKI_S3_INSECURE: "${LOKI_S3_INSECURE:-false}"
+      LOKI_S3_SKIP_VERIFY: "${LOKI_S3_SKIP_VERIFY:-false}"
+      LOKI_RETENTION_PERIOD: "${LOKI_RETENTION_PERIOD:-2160h}"
     volumes:
       - ./observability/loki-config.yml:/etc/loki/config.yml:ro
       - ./data/loki:/loki
-    networks: [ obs ]
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "minio.ecofuturo.com.bo:host-gateway"
+      - "minio-console.ecofuturo.com.bo:host-gateway"
+    networks:
+      - obs
 
   tempo:
     image: grafana/tempo:${TEMPO_VERSION}
+    container_name: ecomonitor-dev-tempo
+    restart: unless-stopped
     command:
-      - -config.file=/etc/tempo.yaml
-      - -config.expand-env=true
+      - "-config.file=/etc/tempo.yaml"
+      - "-config.expand-env=true"
     environment:
-      PROMETHEUS_URL: "${PROMETHEUS_URL}"
-      TEMPO_HTTP_LISTEN_PORT: "${TEMPO_HTTP_LISTEN_PORT}"
-      TEMPO_GRPC_LISTEN_PORT: "${TEMPO_GRPC_LISTEN_PORT}"
-      TEMPO_HTTP_RECEIVER_PORT: "${TEMPO_HTTP_RECEIVER_PORT}"
-      TEMPO_FRONTEND_PORT: "${TEMPO_FRONTEND_PORT}"
+      PROMETHEUS_URL: "${PROMETHEUS_URL:-http://prometheus:9090}"
+
+      TEMPO_HTTP_LISTEN_PORT: "${TEMPO_HTTP_LISTEN_PORT:-3200}"
+      TEMPO_GRPC_LISTEN_PORT: "${TEMPO_GRPC_LISTEN_PORT:-4317}"
+      TEMPO_HTTP_RECEIVER_PORT: "${TEMPO_HTTP_RECEIVER_PORT:-4318}"
+      TEMPO_FRONTEND_PORT: "${TEMPO_FRONTEND_PORT:-9095}"
+
       TEMPO_STORAGE_DIR: "${TEMPO_STORAGE_DIR:-/var/tempo}"
+      TEMPO_BLOCK_RETENTION: "${TEMPO_BLOCK_RETENTION:-2160h}"
+
+      TEMPO_S3_BUCKET: "${TEMPO_S3_BUCKET:-tempo}"
+      TEMPO_S3_ENDPOINT: "${TEMPO_S3_ENDPOINT:-minio.ecofuturo.com.bo}"
+      TEMPO_S3_REGION: "${TEMPO_S3_REGION:-us-east-1}"
+      TEMPO_S3_ACCESS_KEY: "${TEMPO_S3_ACCESS_KEY:-admin_ecofuturo}"
+      TEMPO_S3_SECRET_KEY: "${TEMPO_S3_SECRET_KEY}"
+      TEMPO_S3_INSECURE: "${TEMPO_S3_INSECURE:-false}"
+      TEMPO_S3_SKIP_VERIFY: "${TEMPO_S3_SKIP_VERIFY:-false}"
     volumes:
       - ./observability/tempo.yml:/etc/tempo.yaml:ro
       - ./data/tempo:/var/tempo
-    networks: [ obs ]
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      prometheus:
+        condition: service_started
+    extra_hosts:
+      - "minio.ecofuturo.com.bo:host-gateway"
+      - "minio-console.ecofuturo.com.bo:host-gateway"
+    networks:
+      - obs
 
   grafana:
     image: grafana/grafana:${GRAFANA_VERSION}

@@ -42,7 +42,7 @@ No es correcto decir que el proyecto actualmente genera `ldap.toml` dinámicamen
 Los archivos relevantes para LDAP son:
 
 ```text
-obs-bank-v2/
+EcoMonitor/
 ├── docker-compose.yml
 ├── deploy.prod.ps1
 ├── deploy/

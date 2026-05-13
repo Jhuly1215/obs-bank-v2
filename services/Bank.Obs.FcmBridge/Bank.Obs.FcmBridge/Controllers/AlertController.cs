@@ -26,7 +26,7 @@ public class AlertController : ControllerBase
     [HttpGet("health")]
     public IActionResult HealthCheck()
     {
-        return Ok(new { status = "UP", service = "obs-bank-fcm-bridge" });
+        return Ok(new { status = "UP", service = "ecomonitor-fcm-bridge" });
     }
 
     [HttpPost("alert")]

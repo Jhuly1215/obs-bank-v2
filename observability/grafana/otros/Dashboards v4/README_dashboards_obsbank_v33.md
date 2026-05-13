@@ -1,6 +1,6 @@
 # Dashboards ObsBank v3.3
 
-Estos JSON están alineados con el SQL poller actual de `Jhuly1215/obs-bank-v2`.
+Estos JSON están alineados con el SQL poller actual de `Usuario/EcoMonitor`.
 
 ## Incluyen
 - Operación ejecutiva

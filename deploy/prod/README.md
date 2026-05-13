@@ -27,7 +27,7 @@ En producción, el sistema utiliza **MinIO (S3)** para garantizar que los logs y
 
 ## 🚀 Comandos de Operación
 
-Desde la raíz del proyecto (`obs-bank-v2/`):
+Desde la raíz del proyecto (`EcoMonitor/`):
 
 ### Iniciar / Actualizar
 El script Powershell automatiza la combinación de configuraciones base y de producción:
